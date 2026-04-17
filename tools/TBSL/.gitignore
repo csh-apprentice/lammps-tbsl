@@ -1,0 +1,12 @@
+# Generated LAMMPS data files (can be large — regenerate with generate_particles_lattice.py)
+*.lammpsdata
+
+# Intermediate binary shards from parallel selection
+.sel_shard_*.bin
+.sel_shard_*.bin.sorted
+._coords.bin
+chunks_out/
+
+# Job logs
+*.log
+*.err
