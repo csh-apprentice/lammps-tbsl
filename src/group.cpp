@@ -1755,3 +1755,216 @@ void Group::omega(double *angmom, double inertia[3][3], double *w)
     MathExtra::angmom_to_omega(angmom,ex,ey,ez,idiag,w);
   }
 }
+
+/* ----------------------------------------------------------------------
+   SL mode, return the radius of the bubble
+------------------------------------------------------------------------- */
+
+double Group::SL_radius(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->SL_radius;
+}
+
+/* ----------------------------------------------------------------------
+   SL mode, return the radius of the bubble in the last step
+------------------------------------------------------------------------- */
+
+double Group::SL_radius_old(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->SL_lastradius;
+}
+
+/* ----------------------------------------------------------------------
+   SL mode, return the velocity of the bubble
+------------------------------------------------------------------------- */
+
+double Group::SL_vradius(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->SL_vradius;
+}
+
+/* ----------------------------------------------------------------------
+   SL mode, return the number of atoms in the gas shell
+------------------------------------------------------------------------- */
+
+double Group::SL_count(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->numatoms;
+}
+
+/* ----------------------------------------------------------------------
+   SL mode, return the pressure in the gas shell (from outside PB)
+------------------------------------------------------------------------- */
+
+double Group::SL_pB(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->pB;
+}
+
+/* ----------------------------------------------------------------------
+   SL mode, return the pressure in the gas shell (from outside PB) in the previous step
+------------------------------------------------------------------------- */
+
+double Group::SL_pB_old(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->pB_old;
+}
+
+
+/* ----------------------------------------------------------------------
+   SL mode, return the pressure in the gas shell (from inside Pb)
+------------------------------------------------------------------------- */
+
+double Group::SL_pb(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->pb;
+}
+
+/* ----------------------------------------------------------------------
+   SL mode, return the temperature in the gas wall
+------------------------------------------------------------------------- */
+
+double Group::SL_gastemp(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->SL_Tblgas;
+}
+
+/* ----------------------------------------------------------------------
+   SL mode, return the temperature in the liquid shell
+------------------------------------------------------------------------- */
+
+double Group::SL_walltemp(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->SL_Tblliquid;
+}
+
+/* ----------------------------------------------------------------------
+   SL mode, return the thickness in the liquid shell
+------------------------------------------------------------------------- */
+
+double Group::SL_delta(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->SL_delta;
+}
+
+/* ----------------------------------------------------------------------
+   SL mode, return the thickness in the liquid shell from last step
+------------------------------------------------------------------------- */
+
+double Group::SL_delta_old(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->SL_deltaold;
+}
+
+
+/* ----------------------------------------------------------------------
+   SL mode, return the vdelta in the liquid shell
+------------------------------------------------------------------------- */
+
+double Group::SL_vdelta(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->SL_vdelta;
+}
+
+
+/* ----------------------------------------------------------------------
+   SL mode, return the temperature in the liquid shell
+------------------------------------------------------------------------- */
+
+double Group::SL_numatoms(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->numatoms;
+}
+
+/* ----------------------------------------------------------------------
+   SL mode, return the debug variable
+------------------------------------------------------------------------- */
+
+double Group::SL_debug(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->SL_debug;
+}
+
+/* ----------------------------------------------------------------------
+   SL mode, return the steps
+------------------------------------------------------------------------- */
+
+double Group::SL_steps(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->SL_steps;
+}
+
+/* ----------------------------------------------------------------------
+   SL mode, return the theory radius
+------------------------------------------------------------------------- */
+
+double Group::TH_radius(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->th_radius;
+}
+
+/* ----------------------------------------------------------------------
+   SL mode, return the theory vradius
+------------------------------------------------------------------------- */
+
+double Group::TH_vradius(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->th_vradius;
+}
+
+/* ----------------------------------------------------------------------
+   SL mode, return the theory aradius
+------------------------------------------------------------------------- */
+
+double Group::TH_aradius(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->th_aradius;
+}
+
+/* ----------------------------------------------------------------------
+   SL mode, return the theory wall temperature
+------------------------------------------------------------------------- */
+
+double Group::TH_Tb0(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->th_Tb0;
+}
+
+/* ----------------------------------------------------------------------
+   SL mode, return the theory wall thickness
+------------------------------------------------------------------------- */
+
+double Group::TH_delta(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->th_delta;
+}
+/* ----------------------------------------------------------------------
+   SL mode, return the debug variable
+------------------------------------------------------------------------- */
+
+int Group::SL_lost(int igroup, Region *region)
+{
+  //region->prematch();
+  return region->lost_partilces;
+}
+

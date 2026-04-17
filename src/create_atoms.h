@@ -30,7 +30,7 @@ class CreateAtoms : public Command {
   void command(int, char **) override;
 
  private:
-  int ntype, style, mode, nbasis, nrandom, seed;
+  int ntype, style, mode, nbasis, nrandom, nununiform,seed;
   int remapflag;
   int maxtry;
   int quat_user;
@@ -42,6 +42,12 @@ class CreateAtoms : public Command {
   int *basistype;
   double xone[3], quatone[4];
   double radthresh, radscale, mesh_density;
+  double a,c; // parameters used in the ununiform case: rho=c/Rb^3, rhor=a*r^2/Rb^3
+  double Rb;  // bubble radius in the ununiform case
+  double *xlist; // x points in Zigguart Algorithm
+  double *ylist; // y points in Zigguart Algorithm
+  double res; // resolution in Zigguart Algorithm
+  double tolerance; //tolerance for algorithm in Ziggurat
 
   int varflag, vvar, xvar, yvar, zvar;
   char *vstr, *xstr, *ystr, *zstr;
@@ -66,6 +72,7 @@ class CreateAtoms : public Command {
 
   void add_single();
   void add_random();
+  void add_ununiform();
   void add_mesh(const char *);
   int add_bisection(const double[3][3], tagint);
   int add_quasirandom(const double[3][3], tagint);
@@ -73,6 +80,9 @@ class CreateAtoms : public Command {
   void loop_lattice(int);
   void add_molecule(double *);
   int vartest(double *);    // evaluate a variable with new atom position
+  void Ziggurat();  //set the xlist and the ylist in the Ziggurat Algorithm
+  double findroot(double,double,double,double,double,int); //find the root in Zigguart 
+  double findroot_debug(double,double,double,double,double,int); //find the root in Zigguart
 };
 
 }    // namespace LAMMPS_NS

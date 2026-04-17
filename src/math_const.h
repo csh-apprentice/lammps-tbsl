@@ -34,6 +34,8 @@ namespace MathConst {
   static constexpr double MY_TWOBYSIXTH = 1.12246204830937298142;   // 2^(1/6)                                                                  //
   static constexpr double DEG2RAD = MY_PI / 180.0;                  // degree to radians
   static constexpr double RAD2DEG = 180.0 / MY_PI;                  // radians to degree
+  static constexpr double KB = 1.380649e-23;                 // boltzman constant
+  static constexpr double NA = 6.02214076e23;                 // Avogadro constant 
 }    // namespace MathConst
 
 }    // namespace LAMMPS_NS

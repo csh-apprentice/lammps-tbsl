@@ -388,6 +388,7 @@ void Modify::setup_pre_reverse(int eflag, int vflag)
 
 void Modify::initial_integrate(int vflag)
 {
+  //utils::logmesg(lmp,"In step {}, number of initial intergrate is {} \n",update->ntimestep,n_initial_integrate);
   for (int i = 0; i < n_initial_integrate; i++)
     fix[list_initial_integrate[i]]->initial_integrate(vflag);
 }

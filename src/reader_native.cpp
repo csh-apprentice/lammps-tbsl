@@ -28,7 +28,7 @@ using namespace LAMMPS_NS;
 
 // also in read_dump.cpp
 
-enum{ID,TYPE,X,Y,Z,VX,VY,VZ,Q,IX,IY,IZ,FX,FY,FZ};
+enum{ID,TYPE,X,Y,Z,VX,VY,VZ,Q,IX,IY,IZ,FX,FY,FZ,ITLAST,I2LABEL,DMINDIST};
 enum{UNSET,NOSCALE_NOWRAP,NOSCALE_WRAP,SCALE_NOWRAP,SCALE_WRAP};
 
 /* ---------------------------------------------------------------------- */
@@ -424,6 +424,12 @@ bigint ReaderNative::read_header(double box[3][3], int &boxinfo, int &triclinic,
       fieldindex[i] = find_label("iy", labels);
     else if (fieldtype[i] == IZ)
       fieldindex[i] = find_label("iz", labels);
+    else if (fieldtype[i] == ITLAST)
+      fieldindex[i] = find_label("i_tlast", labels);
+    else if (fieldtype[i] == I2LABEL)
+      fieldindex[i] = find_label("i2_label", labels);
+    else if (fieldtype[i] == DMINDIST)
+      fieldindex[i] = find_label("d_mindist", labels);  
   }
 
   // set fieldflag = -1 if any unfound fields

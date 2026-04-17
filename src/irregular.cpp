@@ -217,6 +217,141 @@ void Irregular::migrate_atoms(int sortflag, int preassign, int *procassign)
 }
 
 /* ----------------------------------------------------------------------
+   communicate atoms to new owning procs via irregular communication
+   can be used in place of comm->exchange()
+   unlike exchange(), allows atoms to have moved arbitrarily long distances
+   sets up irregular plan, invokes it, destroys it
+   sortflag = flag for sorting order of received messages by proc ID
+   preassign = 1 if already know procs that atoms are assigned to via RCB
+   procassign = list of proc assignments for each owned atom
+   atoms MUST be remapped to be inside simulation box before this is called
+   for triclinic: atoms must be in lamda coords (0-1) before this is called
+------------------------------------------------------------------------- */
+
+// In irregular.cpp (or the file that defines Irregular methods)
+
+void Irregular::migrate_atoms_super(int sortflag, int preassign, int *procassign)
+{
+  // Ensure send buffer is large enough for the bigger exchange record ( +3 for forces )
+  const int bufextra_old = bufextra;
+  init_exchange(); // sets bufextra, bonus flags, etc.
+
+  // We don't know init_exchange() internals, so conservatively add +3 to bufextra allowance.
+  // grow_send(size,flag) semantics match the stock code.
+  const int bufextra_super = bufextra + 3;
+  if (bufextra_super > bufextra_old) grow_send(maxsend + bufextra_super, 2);
+
+  // map & ghost clearing (same as stock)
+  if (map_style != Atom::MAP_NONE) atom->map_clear();
+  atom->nghost = 0;
+  atom->avec->clear_bonus();
+
+  // subdomain bounds
+  double *sublo, *subhi;
+  if (triclinic == 0) {
+    sublo = domain->sublo;
+    subhi = domain->subhi;
+  } else {
+    sublo = domain->sublo_lamda;
+    subhi = domain->subhi_lamda;
+  }
+
+  // If we’ll ask Comm to assign procs by coords, prepare the RCB info
+  if (!preassign) comm->coord2proc_setup();
+
+  AtomVec *avec = atom->avec;
+  double **x    = atom->x;
+  int nlocal    = atom->nlocal;
+
+  // ensure temp arrays are big enough
+  if (nlocal > maxlocal) {
+    maxlocal = nlocal;
+    memory->destroy(mproclist);
+    memory->destroy(msizes);
+    memory->create(mproclist, maxlocal, "irregular:mproclist");
+    memory->create(msizes,    maxlocal, "irregular:msizes");
+  }
+
+  int igx, igy, igz;
+  int nsend = 0;        // running size (in doubles) of the send buffer used
+  int nsendatom = 0;    // number of atoms being sent
+  int i = 0;
+
+  if (preassign) {
+    // Caller provided per-atom target procs in procassign[]
+    while (i < nlocal) {
+      if (procassign[i] == me) {
+        i++;
+      } else {
+        mproclist[nsendatom] = procassign[i];
+        if (nsend > maxsend) grow_send(nsend, 1);
+
+        // --- SUPER PACK (includes f[i][0..2]) ---
+        msizes[nsendatom] = avec->pack_exchange_super(i, &buf_send[nsend]);
+
+        nsend += msizes[nsendatom];
+        nsendatom++;
+
+        // remove atom i by replacing with last local atom
+        
+        avec->copy_super(nlocal-1, i, 1);
+        procassign[i] = procassign[nlocal-1];
+        nlocal--;
+      }
+    }
+
+  } else {
+    // Decide destinations by current coordinates
+    while (i < nlocal) {
+      if (x[i][0] < sublo[0] || x[i][0] >= subhi[0] ||
+          x[i][1] < sublo[1] || x[i][1] >= subhi[1] ||
+          x[i][2] < sublo[2] || x[i][2] >= subhi[2]) {
+
+        mproclist[nsendatom] = comm->coord2proc(x[i], igx, igy, igz);
+
+        // If round-off assigns me, keep the atom
+        if (mproclist[nsendatom] == me) {
+          i++;
+        } else {
+          if (nsend > maxsend) grow_send(nsend, 1);
+
+          // --- SUPER PACK (includes f[i][0..2]) ---
+          msizes[nsendatom] = avec->pack_exchange_super(i, &buf_send[nsend]);
+
+          nsend += msizes[nsendatom];
+          nsendatom++;
+
+          // remove atom i by replacing with last local atom
+          avec->copy_super(nlocal-1, i, 1);
+          nlocal--;
+        }
+      } else {
+        i++;
+      }
+    }
+  }
+
+  atom->nlocal = nlocal;
+
+  // Build irregular plan, perform exchange, tear it down
+  const int nrecv = create_atom(nsendatom, msizes, mproclist, sortflag);
+  if (nrecv > maxrecv) grow_recv(nrecv);
+  exchange_atom(buf_send, msizes, buf_recv);
+  destroy_atom();
+
+  // Append received atoms to local list
+  int m = 0;
+  while (m < nrecv) {
+    // --- SUPER UNPACK (writes f[nlocal][0..2]) ---
+    m += avec->unpack_exchange_super(&buf_recv[m]);
+  }
+
+  // Rebuild global->local map with new ownership
+  if (map_style) atom->map_set();
+}
+
+
+/* ----------------------------------------------------------------------
    check if any atoms need to migrate further than one proc away in any dim
    if not, caller can decide to use comm->exchange() instead
    should not be called for layout = TILED

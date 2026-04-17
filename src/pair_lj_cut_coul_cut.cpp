@@ -126,7 +126,8 @@ void PairLJCutCoulCut::compute(int eflag, int vflag)
           forcelj = 0.0;
 
         fpair = (factor_coul * forcecoul + factor_lj * forcelj) * r2inv;
-
+         //utils::logmesg(lmp,"pair/lj/cut/coul: forcelj {} forcecoul {}\n",
+         //          forcelj,forcecoul);
         f[i][0] += delx * fpair;
         f[i][1] += dely * fpair;
         f[i][2] += delz * fpair;
@@ -462,8 +463,8 @@ double PairLJCutCoulCut::single(int i, int j, int itype, int jtype, double rsq, 
 /* ---------------------------------------------------------------------- */
 
 void PairLJCutCoulCut::born_matrix(int i, int j, int itype, int jtype, double rsq,
-                            double factor_coul, double factor_lj, double &dupair,
-                            double &du2pair)
+                                   double factor_coul, double factor_lj, double &dupair,
+                                   double &du2pair)
 {
   double rinv, r2inv, r3inv, r6inv;
   double du_lj, du2_lj, du_coul, du2_coul;

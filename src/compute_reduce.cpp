@@ -77,6 +77,19 @@ ComputeReduce::ComputeReduce(LAMMPS *lmp, int narg, char **arg) :
       error->all(FLERR, "Region {} for compute reduce/region does not exist", arg[3]);
     idregion = utils::strdup(arg[3]);
     iarg = 4;
+  } else if (strcmp(style, "reduce/slregion") == 0) {
+    if (narg < 6) utils::missing_cmd_args(FLERR, "compute reduce/slregion", error);
+    if (!domain->get_region_by_id(arg[3]))
+      error->all(FLERR, "Region {} for compute reduce/slregion does not exist", arg[3]);
+    idregion = utils::strdup(arg[3]);
+    iarg = 4;
+  }
+  else if (strcmp(style, "reduce/shell") == 0) {
+    if (narg < 6) utils::missing_cmd_args(FLERR, "compute reduce/shell", error);
+    if (!domain->get_region_by_id(arg[3]))
+      error->all(FLERR, "Region {} for compute reduce/shell does not exist", arg[3]);
+    idregion = utils::strdup(arg[3]);
+    iarg = 4;
   }
 
   if (strcmp(arg[iarg], "sum") == 0)

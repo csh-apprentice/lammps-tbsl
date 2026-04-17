@@ -328,6 +328,7 @@ void Finish::end(int flag)
     }
 
     mpi_timings("Pair",timer,Timer::PAIR, world,nprocs,nthreads,me,time_loop,screen,logfile);
+    mpi_timings("Ioniz",timer,Timer::IONIZATION, world,nprocs,nthreads,me,time_loop,screen,logfile);
 
     if (atom->molecular != Atom::ATOMIC)
       mpi_timings("Bond",timer,Timer::BOND,world,nprocs,nthreads,me,time_loop,screen,logfile);

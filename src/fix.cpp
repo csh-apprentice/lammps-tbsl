@@ -528,6 +528,36 @@ void Fix::v_tally(int i, double *v)
 }
 
 /* ----------------------------------------------------------------------
+   Except for SL restart, counting the virial but don't update the velocity
+   tally virial into global and per-atom accumulators
+   i = local index of atom
+   v = total virial for the interaction
+   increment global virial by v
+   increment per-atom virial by v
+   this method can be used when fix computes forces in post_force()
+   and the force depends on a distance to some external object
+     e.g. fix wall/lj93: compute virial only on owned atoms
+------------------------------------------------------------------------- */
+
+void Fix::v_tally_novel(int i, double *v)
+{
+  if (vflag_global) {
+    virial[0] += v[0];
+    virial[1] += v[1];
+    virial[2] += v[2];
+    virial[3] += v[3];
+    virial[4] += v[4];
+    virial[5] += v[5];
+  }
+
+}
+
+void Fix::num_tally(int num)
+{
+  sumnumatoms+=num;
+}
+
+/* ----------------------------------------------------------------------
    tally virial component into global and per-atom accumulators
    n = index of virial component (0-5)
    i = local index of atom

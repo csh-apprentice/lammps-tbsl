@@ -103,7 +103,8 @@ void PairCoulCut::compute(int eflag, int vflag)
         rinv = sqrt(r2inv);
         forcecoul = qqrd2e * scale[itype][jtype] * qtmp * q[j] * rinv;
         fpair = factor_coul * forcecoul * r2inv;
-
+        //utils::logmesg(lmp,"coul/cut START: qi {} qj {}\n",
+        //           q[i],q[j]);
         f[i][0] += delx * fpair;
         f[i][1] += dely * fpair;
         f[i][2] += delz * fpair;
@@ -112,6 +113,8 @@ void PairCoulCut::compute(int eflag, int vflag)
           f[j][1] -= dely * fpair;
           f[j][2] -= delz * fpair;
         }
+        //utils::logmesg(lmp,"coul/cut END: qi {} qj {}\n",
+        //           q[i],q[j]);
 
         if (eflag) ecoul = factor_coul * qqrd2e * scale[itype][jtype] * qtmp * q[j] * rinv;
 
@@ -331,8 +334,8 @@ double PairCoulCut::single(int i, int j, int /*itype*/, int /*jtype*/, double rs
 /* ---------------------------------------------------------------------- */
 
 void PairCoulCut::born_matrix(int i, int j, int /*itype*/, int /*jtype*/, double rsq,
-                            double factor_coul, double /*factor_lj*/, double &dupair,
-                            double &du2pair)
+                              double factor_coul, double /*factor_lj*/, double &dupair,
+                              double &du2pair)
 {
   double rinv, r2inv, r3inv;
   double du_coul, du2_coul;

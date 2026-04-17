@@ -33,9 +33,9 @@
 
 using namespace LAMMPS_NS;
 
-enum{CREATE,SET,SCALE,RAMP,ZERO};
+enum{CREATE,SET,SCALE,RAMP,ZERO};  
 enum{ALL,LOCAL,GEOM};
-enum{UNIFORM,GAUSSIAN};
+enum{UNIFORM,GAUSSIAN,YOUNG};  // YOUNG here refers to the ununiform distribution of the velovity based on Ho-Young's work, the first argument for temperature is Tinfty
 enum{NONE,CONSTANT,EQUAL,ATOM};
 
 #define WARMUP 100
@@ -277,10 +277,21 @@ void Velocity::create(double t_desired, int seed)
         vx = random->uniform() - 0.5;
         vy = random->uniform() - 0.5;
         vz = random->uniform() - 0.5;
-      } else { // GAUSSIAN
+      } else if(dist_flag == GAUSSIAN){ // GAUSSIAN
         vx = random->gaussian();
         vy = random->gaussian();
         vz = random->gaussian();
+      } else { //YOUNG set to sphere uniform for testing 
+        
+        double theta=2*M_PI*random->uniform();
+        vz=2*random->uniform()-1;
+        vx=sqrt(1.0-vz*vz)*cos(theta);
+        vy=sqrt(1.0-vz*vz)*sin(theta);
+        /*
+        vx = random->uniform() - 0.5;
+        vy = random->uniform() - 0.5;
+        vz = random->uniform() - 0.5;
+        */
       }
       m = atom->map(i);
       if (m >= 0 && m < nlocal) {
@@ -366,7 +377,16 @@ void Velocity::create(double t_desired, int seed)
   if ((bias_flag == 0) || (temperature_nobias == nullptr))
     t = temperature->compute_scalar();
   else t = temperature_nobias->compute_scalar();
-  rescale(t,t_desired);
+
+  if(dist_flag!=YOUNG)
+    rescale(t,t_desired);
+  else
+    {
+      rescale_young(t,t_desired);
+      //utils::logmesg(lmp, "Create Velocity:  Young Dist!\n");
+    }
+    
+
 
   // if bias_flag set, restore bias velocity to all atoms
   // reapply needed for temperature computes where velocity
@@ -733,6 +753,41 @@ void Velocity::rescale(double t_old, double t_new)
 }
 
 /* ----------------------------------------------------------------------
+   rescale velocities of group atoms to t_new from t_old
+   no bias applied here, since done in create() and scale()
+------------------------------------------------------------------------- */
+
+void Velocity::rescale_young(double Told, double Tinfty)
+{
+  if (Told == 0.0) error->all(FLERR,"Attempting to rescale a 0.0 temperature");
+
+  double factor = 0.0;
+  double Tnew=0.0; 
+  double r=0.0;
+
+  double **v = atom->v;
+  double **x = atom->x;
+  int *mask = atom->mask;
+  int nlocal = atom->nlocal;
+  //double debug=B/A*(-1.0+sqrt(pow((1.0+A/B*Tb0),2)-2*eta*(A/B)*(Tbl-Tinfty)*1.0));
+  //debug=B/A*(-1+(1.0+A/B*Tb0));
+  //utils::logmesg(lmp, "Rescale Young:  Tnew is {}!\n",debug);
+
+  for (int i = 0; i < nlocal; i++)
+    if (mask[i] & groupbit) {
+      r=sqrt(x[i][0]*x[i][0]+x[i][1]*x[i][1]+x[i][2]*x[i][2]);
+      Tnew=B/A*(-1+sqrt(pow((1.0+A/B*Tb0),2)-2*eta*(A/B)*(Tbl-Tinfty)*pow(r/Rb,2)));
+      //Tnew=B/A*(-1+sqrt(pow((1.0+A/B*Tb0),2)-2*eta*(A/B)*(Tbl-Tinfty)*1.0));
+      //Tnew=Tbl;
+      factor=sqrt(ensem_scale*Tnew/Told);
+      //factor*=0.1;
+      v[i][0] *= factor;
+      v[i][1] *= factor;
+      v[i][2] *= factor;
+    }
+}
+
+/* ----------------------------------------------------------------------
    zero the linear momentum of a group of atoms by adjusting v by -Vcm
 ------------------------------------------------------------------------- */
 
@@ -821,9 +876,24 @@ void Velocity::options(int narg, char **arg)
   int iarg = 0;
   while (iarg < narg) {
     if (strcmp(arg[iarg],"dist") == 0) {
-      if (iarg+2 > narg) utils::missing_cmd_args(FLERR, "velocity dist", error);
+      if (iarg+2 > narg || (strcmp(arg[iarg+1],"young")==0 && iarg+4>narg)) utils::missing_cmd_args(FLERR, "velocity dist", error);
       if (strcmp(arg[iarg+1],"uniform") == 0) dist_flag = UNIFORM;
       else if (strcmp(arg[iarg+1],"gaussian") == 0) dist_flag = GAUSSIAN;
+      else if (strcmp(arg[iarg+1],"young")==0) {
+        dist_flag=YOUNG;
+        Tb0=utils::numeric(FLERR, arg[iarg+2], false, lmp);
+        if (Tb0 < 0) error->all(FLERR, "Illegal center temperature Tb0 {}", Tb0);
+        Tbl=utils::numeric(FLERR, arg[iarg+3], false, lmp);
+        if (Tbl < 0) error->all(FLERR, "Illegal boundary temperature Tbl {}", Tbl);
+        A=utils::numeric(FLERR, arg[iarg+4], false, lmp);
+        B=utils::numeric(FLERR, arg[iarg+5], false, lmp);
+        eta=utils::numeric(FLERR, arg[iarg+6], false, lmp);
+        Rb=utils::numeric(FLERR, arg[iarg+7], false, lmp);
+        ensem_scale=utils::numeric(FLERR, arg[iarg+8], false, lmp);
+        if (Rb <= 0) error->all(FLERR, "Illegal create_velocity bubble radius {} in Young distribution", Rb);
+        if (ensem_scale <= 0) error->all(FLERR, "Illegal create_velocity ensemble scale {} in Young distribution", ensem_scale);
+        iarg+=7;    //additional options in Young dist
+      }
       else error->all(FLERR,"Unknown velocity dist argument: {}", arg[iarg+1]);
       iarg += 2;
     } else if (strcmp(arg[iarg],"sum") == 0) {

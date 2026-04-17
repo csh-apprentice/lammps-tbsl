@@ -344,6 +344,15 @@ void AtomVec::copy(int i, int j, int delflag)
       modify->fix[atom->extra_grow[iextra]]->copy_arrays(i, j, delflag);
 }
 
+void AtomVec::copy_super(int i, int j, int delflag)
+{
+  copy(i, j, delflag);
+  std::memcpy(atom->f[j], atom->f[i], 3*sizeof(double));
+
+  if (atom->torque) std::memcpy(atom->torque[j], atom->torque[i], 3*sizeof(double));
+  if (atom->omega)  std::memcpy(atom->omega[j],  atom->omega[i],  3*sizeof(double));
+}
+
 /* ---------------------------------------------------------------------- */
 
 int AtomVec::pack_comm(int n, int *list, double *buf, int pbc_flag, int *pbc)
@@ -1330,6 +1339,203 @@ int AtomVec::unpack_exchange(double *buf)
   atom->nlocal++;
   return m;
 }
+
+int AtomVec::pack_exchange_super(int i, double *buf)
+{
+  int mm, nn, datatype, cols, collength, ncols;
+  void *pdata, *plength;
+
+  int m = 1;
+  // mandatory header: coords first
+  buf[m++] = x[i][0];
+  buf[m++] = x[i][1];
+  buf[m++] = x[i][2];
+
+  // usual core fields
+  buf[m++] = v[i][0];
+  buf[m++] = v[i][1];
+  buf[m++] = v[i][2];
+  buf[m++] = ubuf(tag[i]).d;
+  buf[m++] = ubuf(type[i]).d;
+  buf[m++] = ubuf(mask[i]).d;
+  buf[m++] = ubuf(image[i]).d;
+
+  // ---- NEW: forces ----
+  std::memcpy(&buf[m], f[i], 3*sizeof(double));
+  m += 3;
+  // ---------------------
+
+  // optional mexchange payload (unchanged)
+  if (nexchange) {
+    for (nn = 0; nn < nexchange; nn++) {
+      pdata = mexchange.pdata[nn];
+      datatype = mexchange.datatype[nn];
+      cols = mexchange.cols[nn];
+      if (datatype == Atom::DOUBLE) {
+        if (cols == 0) {
+          double *vec = *((double **) pdata);
+          buf[m++] = vec[i];
+        } else if (cols > 0) {
+          double **array = *((double ***) pdata);
+          for (mm = 0; mm < cols; mm++) buf[m++] = array[i][mm];
+        } else {
+          double **array = *((double ***) pdata);
+          collength = mexchange.collength[nn];
+          plength = mexchange.plength[nn];
+          if (collength)
+            ncols = (*((int ***) plength))[i][collength - 1];
+          else
+            ncols = (*((int **) plength))[i];
+          for (mm = 0; mm < ncols; mm++) buf[m++] = array[i][mm];
+        }
+      } else if (datatype == Atom::INT) {
+        if (cols == 0) {
+          int *vec = *((int **) pdata);
+          buf[m++] = ubuf(vec[i]).d;
+        } else if (cols > 0) {
+          int **array = *((int ***) pdata);
+          for (mm = 0; mm < cols; mm++) buf[m++] = ubuf(array[i][mm]).d;
+        } else {
+          int **array = *((int ***) pdata);
+          collength = mexchange.collength[nn];
+          plength = mexchange.plength[nn];
+          if (collength)
+            ncols = (*((int ***) plength))[i][collength - 1];
+          else
+            ncols = (*((int **) plength))[i];
+          for (mm = 0; mm < ncols; mm++) buf[m++] = ubuf(array[i][mm]).d;
+        }
+      } else if (datatype == Atom::BIGINT) {
+        if (cols == 0) {
+          bigint *vec = *((bigint **) pdata);
+          buf[m++] = ubuf(vec[i]).d;
+        } else if (cols > 0) {
+          bigint **array = *((bigint ***) pdata);
+          for (mm = 0; mm < cols; mm++) buf[m++] = ubuf(array[i][mm]).d;
+        } else {
+          bigint **array = *((bigint ***) pdata);
+          collength = mexchange.collength[nn];
+          plength = mexchange.plength[nn];
+          if (collength)
+            ncols = (*((int ***) plength))[i][collength - 1];
+          else
+            ncols = (*((int **) plength))[i];
+          for (mm = 0; mm < ncols; mm++) buf[m++] = ubuf(array[i][mm]).d;
+        }
+      }
+    }
+  }
+
+  if (bonus_flag) m += pack_exchange_bonus(i, &buf[m]);
+
+  if (atom->nextra_grow)
+    for (int iextra = 0; iextra < atom->nextra_grow; iextra++)
+      m += modify->fix[atom->extra_grow[iextra]]->pack_exchange(i, &buf[m]);
+
+  buf[0] = m;
+  return m;
+}
+
+int AtomVec::unpack_exchange_super(double *buf)
+{
+  int mm, nn, datatype, cols, collength, ncols;
+  void *pdata, *plength;
+
+  int nlocal = atom->nlocal;
+  if (nlocal == nmax) grow(0);
+
+  int m = 1;
+  // coords
+  x[nlocal][0] = buf[m++];
+  x[nlocal][1] = buf[m++];
+  x[nlocal][2] = buf[m++];
+
+  // core
+  v[nlocal][0] = buf[m++];
+  v[nlocal][1] = buf[m++];
+  v[nlocal][2] = buf[m++];
+  tag[nlocal]   = (tagint)  ubuf(buf[m++]).i;
+  type[nlocal]  = (int)     ubuf(buf[m++]).i;
+  mask[nlocal]  = (int)     ubuf(buf[m++]).i;
+  image[nlocal] = (imageint)ubuf(buf[m++]).i;
+
+  // ---- NEW: forces ----
+  std::memcpy(f[nlocal], &buf[m], 3*sizeof(double));
+  m += 3;
+  // ---------------------
+
+  // optional mexchange payload (unchanged)
+  if (nexchange) {
+    for (nn = 0; nn < nexchange; nn++) {
+      pdata = mexchange.pdata[nn];
+      datatype = mexchange.datatype[nn];
+      cols = mexchange.cols[nn];
+      if (datatype == Atom::DOUBLE) {
+        if (cols == 0) {
+          double *vec = *((double **) pdata);
+          vec[nlocal] = buf[m++];
+        } else if (cols > 0) {
+          double **array = *((double ***) pdata);
+          for (mm = 0; mm < cols; mm++) array[nlocal][mm] = buf[m++];
+        } else {
+          double **array = *((double ***) pdata);
+          collength = mexchange.collength[nn];
+          plength = mexchange.plength[nn];
+          if (collength)
+            ncols = (*((int ***) plength))[nlocal][collength - 1];
+          else
+            ncols = (*((int **) plength))[nlocal];
+          for (mm = 0; mm < ncols; mm++) array[nlocal][mm] = buf[m++];
+        }
+      } else if (datatype == Atom::INT) {
+        if (cols == 0) {
+          int *vec = *((int **) pdata);
+          vec[nlocal] = (int) ubuf(buf[m++]).i;
+        } else if (cols > 0) {
+          int **array = *((int ***) pdata);
+          for (mm = 0; mm < cols; mm++) array[nlocal][mm] = (int) ubuf(buf[m++]).i;
+        } else {
+          int **array = *((int ***) pdata);
+          collength = mexchange.collength[nn];
+          plength = mexchange.plength[nn];
+          if (collength)
+            ncols = (*((int ***) plength))[nlocal][collength - 1];
+          else
+            ncols = (*((int **) plength))[nlocal];
+          for (mm = 0; mm < ncols; mm++) array[nlocal][mm] = (int) ubuf(buf[m++]).i;
+        }
+      } else if (datatype == Atom::BIGINT) {
+        if (cols == 0) {
+          bigint *vec = *((bigint **) pdata);
+          vec[nlocal] = (bigint) ubuf(buf[m++]).i;
+        } else if (cols > 0) {
+          bigint **array = *((bigint ***) pdata);
+          for (mm = 0; mm < cols; mm++) array[nlocal][mm] = (bigint) ubuf(buf[m++]).i;
+        } else {
+          bigint **array = *((bigint ***) pdata);
+          collength = mexchange.collength[nn];
+          plength = mexchange.plength[nn];
+          if (collength)
+            ncols = (*((int ***) plength))[nlocal][collength - 1];
+          else
+            ncols = (*((int **) plength))[nlocal];
+          for (mm = 0; mm < ncols; mm++) array[nlocal][mm] = (bigint) ubuf(buf[m++]).i;
+        }
+      }
+    }
+  }
+
+  if (bonus_flag) m += unpack_exchange_bonus(nlocal, &buf[m]);
+
+  if (atom->nextra_grow)
+    for (int iextra = 0; iextra < atom->nextra_grow; iextra++)
+      m += modify->fix[atom->extra_grow[iextra]]->unpack_exchange(nlocal, &buf[m]);
+
+  atom->nlocal++;
+  return m;
+}
+
+
 
 /* ----------------------------------------------------------------------
    size of restart data for all atoms owned by this proc

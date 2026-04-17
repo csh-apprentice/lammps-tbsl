@@ -44,6 +44,7 @@ class Variable : protected Pointers {
 
   char *retrieve(const char *);
   double compute_equal(int);
+  double compute_equal_circular(int ivar);
   double compute_equal(const std::string &);
   void compute_atom(int, int, double *, int, int);
   int compute_vector(int, double **);
@@ -141,6 +142,7 @@ class Variable : protected Pointers {
   int math_function(char *, char *, Tree **, Tree **, int &, double *, int &, int);
   int group_function(char *, char *, Tree **, Tree **, int &, double *, int &, int);
   Region *region_function(char *, int);
+  Region *slregion_function(char *, int);  // the same as region function, but don't call init
   int special_function(char *, char *, Tree **, Tree **, int &, double *, int &, int);
   int feature_function(char *, char *, Tree **, Tree **, int &, double *, int &, int);
   void peratom2global(int, char *, double *, int, tagint, Tree **, Tree **, int &, double *, int &);

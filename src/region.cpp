@@ -39,6 +39,14 @@ Region::Region(LAMMPS *lmp, int /*narg*/, char **arg) :
   xstr = ystr = zstr = tstr = nullptr;
   dx = dy = dz = 0.0;
 
+  stress=0.0;
+  pB=0.0;
+  pb=0.0;
+  numatoms=0.0;
+  SL_radius=0.0;
+  SL_lastradius=0.0;
+  lost_partilces=0;
+
   size_restart = 5;
   Region::reset_vel();
   copymode = 0;
@@ -176,6 +184,7 @@ int Region::surface(double x, double y, double z, double cutoff)
   }
 
   if (rotateflag && ncontact) {
+    utils::logmesg(lmp,"Shouldn't have rotateflag!\n");
     for (int i = 0; i < ncontact; i++) {
       xs = xnear[0] - contact[i].delx;
       ys = xnear[1] - contact[i].dely;
@@ -582,3 +591,4 @@ void Region::reset_vel()
 {
   for (int i = 0; i < size_restart; i++) prev[i] = 0;
 }
+

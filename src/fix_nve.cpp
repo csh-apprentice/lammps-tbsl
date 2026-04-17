@@ -66,7 +66,7 @@ void FixNVE::initial_integrate(int /*vflag*/)
   double dtfm;
 
   // update v and x of atoms in group
-
+  //utils::logmesg(lmp,"In step {}, The initial intergration is called! \n",update->ntimestep);
   double **x = atom->x;
   double **v = atom->v;
   double **f = atom->f;
@@ -81,12 +81,24 @@ void FixNVE::initial_integrate(int /*vflag*/)
     for (int i = 0; i < nlocal; i++)
       if (mask[i] & groupbit) {
         dtfm = dtf / rmass[i];
+          //        if((atom->tag)[i]==190)
+          // utils::logmesg(
+          //     lmp,
+          //     "Initial Integrate debug rmass: step {} | idx {} | f = [{:.31f}, {:.31f}, {:.31f}] | v = [{:.31f}, {:.31f}, {:.31f}] | x = [{:.31f}, {:.31f}, {:.31f}] | charge is {} | tlast is {} | label is {} | mindist is {}|\n",
+          //     update->ntimestep, (atom->tag)[i],            // or pass your tag/index variable
+          //     f[i][0], f[i][1], f[i][2],
+          //     v[i][0], v[i][1], v[i][2],
+          //     x[i][0], x[i][1], x[i][2],
+          //     atom->q[i], atom->ivector[0][i], atom->ivector[1][i], atom->dvector[0][i]
+          //   );
         v[i][0] += dtfm * f[i][0];
         v[i][1] += dtfm * f[i][1];
         v[i][2] += dtfm * f[i][2];
         x[i][0] += dtv * v[i][0];
         x[i][1] += dtv * v[i][1];
         x[i][2] += dtv * v[i][2];
+
+
       }
 
   } else {
@@ -99,6 +111,8 @@ void FixNVE::initial_integrate(int /*vflag*/)
         x[i][0] += dtv * v[i][0];
         x[i][1] += dtv * v[i][1];
         x[i][2] += dtv * v[i][2];
+        // if((atom->tag)[i]==9959)
+        //   utils::logmesg(lmp,"Initial Intergrate debug: In step {}, Index 9959 force is fx {}, new x is {} \n",update->ntimestep, f[i][0],x[i][0]);
       }
   }
 }

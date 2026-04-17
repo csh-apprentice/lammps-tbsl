@@ -78,6 +78,7 @@ void PairLJCut::compute(int eflag, int vflag)
 
   double **x = atom->x;
   double **f = atom->f;
+  double **v=atom->v;
   int *type = atom->type;
   int nlocal = atom->nlocal;
   double *special_lj = force->special_lj;

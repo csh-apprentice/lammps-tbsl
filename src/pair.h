@@ -145,6 +145,9 @@ class Pair : protected Pointers {
   // need to be public, so can be called by pair_style reaxc
 
   void ev_tally(int, int, int, int, double, double, double, double, double, double);
+
+  //everything aligns with the ev_tally except not updating the velocity at all
+  void ev_tally_novel(int, int, int, int, double, double, double, double, double, double);
   void ev_tally3(int, int, int, double, double, double *, double *, double *, double *);
   void v_tally2_newton(int, double *, double *);
   void v_tally3(int, int, int, double *, double *, double *, double *);

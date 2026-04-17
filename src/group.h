@@ -66,6 +66,29 @@ class Group : protected Pointers {
   void inertia(int, double *, double[3][3], Region *);
   void omega(double *, double[3][3], double *);    // angular velocity
 
+  // code for SL
+  double SL_radius(int, Region *);   //radius of the bubble
+  double SL_radius_old(int, Region *);   //radius of the bubble from previous step
+  double SL_vradius(int, Region *);  // vradius of the bubble
+  double SL_count(int, Region *);   // number of atoms in the gas shell
+  double SL_pB(int, Region *);  // pressure of gas shell from outside
+  double SL_pB_old(int, Region *);  // pressure of gas shell from outside from last step
+  double SL_pb(int, Region *);  // pressure of gas shell from inside
+  double SL_gastemp(int, Region *);  // temperature of gas shell
+  double SL_walltemp(int, Region *);  // temperature of liquid wall
+  double SL_delta(int, Region *);  // thickness of the liquid shell
+  double SL_delta_old(int, Region *);  // thickness of the liquid shell from last step
+  double SL_vdelta(int, Region *);  // velocity of thickness of the liquid shell
+  double SL_numatoms(int, Region *);  // number of atoms in the gas shell
+  double SL_debug(int, Region *); // print out debug variable
+  double SL_steps(int, Region *); // accumulate steps in SL simulation
+  double TH_radius(int, Region *);  // Radius in Theory Calcultion
+  double TH_vradius(int, Region *);  // Velocity in Theory Calcultion
+  double TH_aradius(int, Region *);  // Accerleration in Theory Calcultion
+  double TH_Tb0(int, Region *); //Temperature of Gas shell in theory
+  double TH_delta(int, Region *); //thickness of Gas shell in theory
+
+  int SL_lost(int, Region *); // print out lost particles
  private:
   int me;
   std::map<tagint, int> *hash;

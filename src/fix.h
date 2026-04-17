@@ -118,6 +118,7 @@ class Fix : protected Pointers {
   int comm_border;     // size of border communication (0 if none)
 
   double virial[6];          // virial for this timestep
+  int sumnumatoms;
   double *eatom, **vatom;    // per-atom energy/virial for this timestep
   double **cvatom;           // per-atom centroid virial for this timestep
 
@@ -301,7 +302,9 @@ class Fix : protected Pointers {
   void v_tally(int, int *, double, double *, int, int, int[][2], double *, double[][3]);
   void v_tally(int, int *, double, double *, double[][3], double[][3], double[]);
   void v_tally(int, double *);
+  void v_tally_novel(int, double *);
   void v_tally(int, int, double);
+  void num_tally(int);
 };
 
 namespace FixConst {

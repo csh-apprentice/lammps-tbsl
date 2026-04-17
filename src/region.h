@@ -63,6 +63,44 @@ class Region : protected Pointers {
   double prev[5];       // stores displacement (X3), angle and if
                         //  necessary, region variable size (e.g. radius)
                         //  at previous time step
+  // SL Mode
+  double stress; //stress in the current region
+  double pB_old;  //current pressure
+  double pB;  //pressure of the current region (from outside), only ussed in SL mode
+  double pb;  // pressure of the wall from inside
+  int numatoms; //number of atoms in the region
+  double SL_radius;  // radius used to communicate wall and the bubble
+  double SL_lastradius;  // radius in the last timestep
+  double SL_vradius; // velocity used to communicate wall and the bubble
+  //double Sl_gashellenergy; // total energy of the gas shell
+  double SL_Tblgas;  // gas shell temperature
+  double SL_Tblgasold;  // last gas shell temperature
+  double SL_Tblliquid;  //liquid shell temperature
+  double SL_Tblliquidold;  //last liquid shell temperature
+  double SL_delta;  // thickness of the liquid shell
+  double SL_deltaold;  // last frame thickness of the liquid shell
+  double SL_vdelta; // velocity of delta
+  double SL_debug;  // a debug variable that you can use for variables output
+  double SL_steps;  // accumulated steps in SL simulation
+
+  // SL Theory
+  double th_radius;
+  double th_vradius;
+  double th_aradius;
+  double th_Tb0;
+  double th_delta;
+
+  // restart strategy
+  double simulate_time; // total simulation time 
+  bool SL_restart=false;
+
+  int lost_partilces;  // number of lost particles in the simulation
+
+  double acousticenergy=0.0;  // acoustic energy
+
+  int stepnum;  // average the dTbl/dt over # stepunm
+  double sumdiffTbl;  // sum of the dTbl/dt
+
   int vel_timestep;     // store timestep at which set_velocity was called
                         //   prevents multiple fix/wall/gran/region calls
   int nregion;          // For union and intersect
@@ -92,6 +130,8 @@ class Region : protected Pointers {
   virtual int surface_interior(double *, double) = 0;
   virtual int surface_exterior(double *, double) = 0;
   virtual void shape_update() {}
+
+
   virtual void pretransform();
   virtual void set_velocity_shape() {}
   virtual void velocity_contact_shape(double *, double *) {}

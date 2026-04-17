@@ -54,7 +54,7 @@ using namespace MathConst;
 
 // CUSTOMIZATION: add a new keyword by adding it to this list:
 
-// step, elapsed, elaplong, dt, time, cpu, tpcpu, spcpu, cpuremain,
+// step, elapsed, elaplong, dt, time, cpu, tpcpu, spcpu, cpuuse, cpuremain,
 // part, timeremain
 // atoms, temp, press, pe, ke, etotal
 // evdwl, ecoul, epair, ebond, eangle, edihed, eimp, emol, elong, etail
@@ -691,11 +691,12 @@ void Thermo::modify_params(int narg, char **arg)
         utils::bounds(FLERR, arg[iarg + 1], 1, nfield_initial, nlo, nhi, error);
         int icol = -1;
         for (int i = nlo - 1; i < nhi; i++) {
-          if (i < 0) icol = nfield_initial + i + 1; // doesn't happen currently
-          else icol = i;
+          if (i < 0)
+            icol = nfield_initial + i + 1;    // doesn't happen currently
+          else
+            icol = i;
           if (icol < 0 || (icol >= nfield_initial))
-            error->all(FLERR, "Invalid thermo_modify format argument: {}",
-              arg[iarg + 1]);
+            error->all(FLERR, "Invalid thermo_modify format argument: {}", arg[iarg + 1]);
           format_column_user[icol] = arg[iarg + 2];
         }
       } else {
@@ -826,8 +827,12 @@ void Thermo::parse_fields(const std::string &str)
       addfield("CPU", &Thermo::compute_cpu, FLOAT);
     } else if (word == "tpcpu") {
       addfield("T/CPU", &Thermo::compute_tpcpu, FLOAT);
+    } else if (word == "vcpu")  {
+      addfield("V/CPU", &Thermo::compute_vcpu, FLOAT);
     } else if (word == "spcpu") {
       addfield("S/CPU", &Thermo::compute_spcpu, FLOAT);
+    } else if (word == "cpuuse") {
+      addfield("%CPU", &Thermo::compute_cpuuse, FLOAT);
     } else if (word == "cpuremain") {
       addfield("CPULeft", &Thermo::compute_cpuremain, FLOAT);
     } else if (word == "part") {
@@ -1135,7 +1140,8 @@ void Thermo::check_temp(const std::string &keyword)
     error->all(FLERR, "Thermo keyword {} in variable requires thermo to use/init temperature",
                keyword);
   if (!temperature->is_initialized())
-    error->all(FLERR,"Thermo keyword {} cannot be invoked before initialization by a run",keyword);
+    error->all(FLERR, "Thermo keyword {} cannot be invoked before initialization by a run",
+               keyword);
   if (!(temperature->invoked_flag & Compute::INVOKED_SCALAR)) {
     temperature->compute_scalar();
     temperature->invoked_flag |= Compute::INVOKED_SCALAR;
@@ -1154,7 +1160,8 @@ void Thermo::check_pe(const std::string &keyword)
     error->all(FLERR, "Thermo keyword {} in variable requires thermo to use/init potential energy",
                keyword);
   if (!pe->is_initialized())
-    error->all(FLERR,"Thermo keyword {} cannot be invoked before initialization by a run",keyword);
+    error->all(FLERR, "Thermo keyword {} cannot be invoked before initialization by a run",
+               keyword);
   if (!(pe->invoked_flag & Compute::INVOKED_SCALAR)) {
     pe->compute_scalar();
     pe->invoked_flag |= Compute::INVOKED_SCALAR;
@@ -1170,7 +1177,8 @@ void Thermo::check_press_scalar(const std::string &keyword)
   if (!pressure)
     error->all(FLERR, "Thermo keyword {} in variable requires thermo to use/init press", keyword);
   if (!pressure->is_initialized())
-    error->all(FLERR,"Thermo keyword {} cannot be invoked before initialization by a run",keyword);
+    error->all(FLERR, "Thermo keyword {} cannot be invoked before initialization by a run",
+               keyword);
   if (!(pressure->invoked_flag & Compute::INVOKED_SCALAR)) {
     pressure->compute_scalar();
     pressure->invoked_flag |= Compute::INVOKED_SCALAR;
@@ -1186,7 +1194,8 @@ void Thermo::check_press_vector(const std::string &keyword)
   if (!pressure)
     error->all(FLERR, "Thermo keyword {} in variable requires thermo to use/init press", keyword);
   if (!pressure->is_initialized())
-    error->all(FLERR,"Thermo keyword {} cannot be invoked before initialization by a run",keyword);
+    error->all(FLERR, "Thermo keyword {} cannot be invoked before initialization by a run",
+               keyword);
   if (!(pressure->invoked_flag & Compute::INVOKED_VECTOR)) {
     pressure->compute_vector();
     pressure->invoked_flag |= Compute::INVOKED_VECTOR;
@@ -1254,10 +1263,20 @@ int Thermo::evaluate_keyword(const std::string &word, double *answer)
       error->all(FLERR, "The variable thermo keyword tpcpu cannot be used between runs");
     compute_tpcpu();
 
+  } else if (word == "vcpu") {
+    if (update->whichflag == 0)
+      error->all(FLERR, "The variable thermo keyword vcpu cannot be used between runs");
+    compute_vcpu();
+
   } else if (word == "spcpu") {
     if (update->whichflag == 0)
       error->all(FLERR, "The variable thermo keyword spcpu cannot be used between runs");
     compute_spcpu();
+
+  } else if (word == "cpuuse") {
+    if (update->whichflag == 0)
+      error->all(FLERR, "The variable thermo keyword cpuuse cannot be used between runs");
+    compute_cpuuse();
 
   } else if (word == "cpuremain") {
     if (update->whichflag == 0)
@@ -1598,6 +1617,29 @@ void Thermo::compute_cpu()
     dvalue = timer->elapsed(Timer::TOTAL);
 }
 
+void Thermo::compute_vcpu()
+{
+  double new_cpu;
+  double new_time = update->atime + (update->ntimestep - update->atimestep) * update->dt;
+
+  if (firststep == 0) {
+    new_cpu = 0.0;
+    dvalue = 0.0;
+  } else {
+    new_cpu = timer->elapsed(Timer::TOTAL);
+    double cpu_diff = new_cpu - last_vcpu;
+    double time_diff = new_time - last_time_vcpu;
+    if (time_diff > 0.0 && cpu_diff > 0.0)
+      dvalue = time_diff / cpu_diff;
+    else
+      dvalue = 0.0;
+  }
+
+  last_time_vcpu = new_time;
+  last_vcpu = new_cpu;
+
+}
+
 /* ---------------------------------------------------------------------- */
 
 void Thermo::compute_tpcpu()
@@ -1645,6 +1687,17 @@ void Thermo::compute_spcpu()
   last_step = new_step;
   last_spcpu = new_cpu;
 }
+
+/* ---------------------------------------------------------------------- */
+
+void Thermo::compute_cpuuse()
+{
+  if (firststep == 0)
+    dvalue = 0.0;
+  else
+    dvalue = 100.0 * timer->cpu(Timer::TOTAL) / (timer->elapsed(Timer::TOTAL) + 1.0e-100);
+}
+
 
 /* ---------------------------------------------------------------------- */
 

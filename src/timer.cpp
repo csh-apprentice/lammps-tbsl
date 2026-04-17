@@ -54,7 +54,7 @@ void Timer::_stamp(enum ttype which)
   if (_level > NORMAL) current_cpu = platform::cputime();
   current_wall = platform::walltime();
 
-  if ((which > TOTAL) && (which < NUM_TIMER)) {
+  if ((which > TOTAL) && (which < NUM_TIMER) && which!=IONIZATION) {
     const double delta_cpu = current_cpu - previous_cpu;
     const double delta_wall = current_wall - previous_wall;
 
@@ -62,10 +62,23 @@ void Timer::_stamp(enum ttype which)
     wall_array[which] += delta_wall;
     cpu_array[ALL] += delta_cpu;
     wall_array[ALL] += delta_wall;
-  }
 
-  previous_cpu = current_cpu;
-  previous_wall = current_wall;
+    
+  }
+  else if (which == IONIZATION)
+  {
+    // ionization is defined in the pair
+    const double delta_cpu = current_cpu - previous_cpu;
+    const double delta_wall = current_wall - previous_wall;
+
+    cpu_array[which] += delta_cpu;
+    wall_array[which] += delta_wall;
+  }
+  if(which!=IONIZATION)
+  {
+    previous_cpu = current_cpu;
+    previous_wall = current_wall;
+  }
 
   if (which == RESET) {
     this->init();

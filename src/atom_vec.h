@@ -79,6 +79,7 @@ class AtomVec : protected Pointers {
   virtual void grow(int);
   virtual void grow_pointers() {}
   virtual void copy(int, int, int);
+  virtual void copy_super(int, int, int);
 
   virtual void copy_bonus(int, int, int) {}
   virtual void clear_bonus() {}
@@ -104,6 +105,9 @@ class AtomVec : protected Pointers {
 
   virtual int pack_exchange(int, double *);
   virtual int unpack_exchange(double *);
+
+  virtual int pack_exchange_super(int, double *);
+  virtual int unpack_exchange_super(double *);
 
   virtual int pack_exchange_bonus(int, double *) { return 0; }
   virtual int unpack_exchange_bonus(int, double *) { return 0; }

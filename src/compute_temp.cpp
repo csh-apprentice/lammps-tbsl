@@ -62,7 +62,11 @@ void ComputeTemp::dof_compute()
   dof = domain->dimension * natoms_temp;
   dof -= extra_dof + fix_dof;
   if (dof > 0.0)
-    tfactor = force->mvv2e / (dof * force->boltz);
+    {
+      tfactor = force->mvv2e / (dof * force->boltz);
+      //utils::logmesg(lmp,"COMPUTE TEMP: step {} mvv2e {} dof {} tfactor {} force->boltz {}\n",
+       //           update->ntimestep,force->mvv2e,dof,tfactor,force->boltz);
+    }
   else
     tfactor = 0.0;
 }

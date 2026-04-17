@@ -18,6 +18,7 @@
 #include "update.h"
 #include "variable.h"
 
+
 #include <cmath>
 
 using namespace LAMMPS_NS;
@@ -207,6 +208,7 @@ void RegSphere::shape_update()
     radius = xscale * input->variable->compute_equal(rvar);
     if (radius < 0.0) error->one(FLERR, "Variable evaluation in region gave bad value");
   }
+  //pressure+=0.1;
 }
 
 /* ----------------------------------------------------------------------

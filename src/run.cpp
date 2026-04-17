@@ -23,7 +23,7 @@
 #include "output.h"
 #include "timer.h"
 #include "update.h"
-
+#include "atom.h"
 #include <cstring>
 
 using namespace LAMMPS_NS;
@@ -151,6 +151,12 @@ void Run::command(int narg, char **arg)
   //   else just init timer and setup output
   // if post, do full Finish, else just print time
 
+    //   for (int i = 0; i < atom->nlocal; i++)
+    // if (atom->mask[i]) {
+    //   if((atom->tag)[i]==9959) utils::logmesg(lmp,"RUN DEBUG1 In step {} atom index {} fx is {}, x is {:.31f}!\n",update->ntimestep,(atom->tag)[i],atom->f[i][0],atom->x[i][0]);
+    // }
+
+
   update->whichflag = 1;
   timer->init_timeout();
 
@@ -165,14 +171,20 @@ void Run::command(int narg, char **arg)
     else update->beginstep = update->firststep;
     if (stopflag) update->endstep = stop;
     else update->endstep = update->laststep;
+    
 
     if (preflag || update->first_update == 0) {
       lmp->init();
       update->integrate->setup(1);
     } else output->setup(0);
+    //       for (int i = 0; i < atom->nlocal; i++)
+    // if (atom->mask[i]) {
+    //   if((atom->tag)[i]==9959) utils::logmesg(lmp,"RUN DEBUG2 In step {} atom index {} fx is {}, x is {:.31f}!\n",update->ntimestep,(atom->tag)[i],atom->f[i][0],atom->x[i][0]);
+    // }
 
     timer->init();
     timer->barrier_start();
+    //utils::logmesg(lmp,"In step {} NEVERY RUN debug2 index {} fx is {}!\n",update->ntimestep,(atom->tag)[9958],atom->f[9958][0]);
     update->integrate->run(nsteps);
     timer->barrier_stop();
 
@@ -211,14 +223,14 @@ void Run::command(int narg, char **arg)
         lmp->init();
         update->integrate->setup(1);
       } else output->setup(0);
-
+      //utils::logmesg(lmp,"In step {} RUN debug1 index {} fx is {}!\n",update->ntimestep,(atom->tag)[9958],atom->f[9958][0]);
       timer->init();
       timer->barrier_start();
       update->integrate->run(nsteps);
       timer->barrier_stop();
-
+      //utils::logmesg(lmp,"In step {} RUN debug2 index {} fx is {}!\n",update->ntimestep,(atom->tag)[9958],atom->f[9958][0]);
       update->integrate->cleanup();
-
+      
       Finish finish(lmp);
       if (postflag || nleft <= nsteps) finish.end(1);
       else finish.end(0);

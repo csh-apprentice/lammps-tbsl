@@ -240,6 +240,7 @@ double ComputePressure::compute_scalar()
 
   if (dimension == 3) {
     inv_volume = 1.0 / (domain->xprd * domain->yprd * domain->zprd);
+    //utils::logmesg(lmp,"domain xsize {}, domain ysize {}, domain zsize {}",domain->xprd,domain->yprd,domain->zprd);
     virial_compute(3,3);
     if (keflag)
       scalar = (temperature->dof * boltz * temperature->scalar +

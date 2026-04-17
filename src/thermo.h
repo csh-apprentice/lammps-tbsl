@@ -65,8 +65,9 @@ class Thermo : protected Pointers {
   int lostbefore, warnbefore;
   int flushflag, lineflag;
 
-  double last_tpcpu, last_spcpu;
+  double last_tpcpu, last_spcpu, last_vcpu;
   double last_time;
+  double last_time_vcpu;
   bigint last_step;
 
   bigint natoms;
@@ -133,8 +134,11 @@ class Thermo : protected Pointers {
   void compute_dt();
   void compute_time();
   void compute_cpu();
+  // add a compute style to print out the avg speed for adaptive timstep
+  void compute_vcpu();  // simulation time (units)/ cpu second
   void compute_tpcpu();
   void compute_spcpu();
+  void compute_cpuuse();
   void compute_cpuremain();
   void compute_part();
   void compute_timeremain();

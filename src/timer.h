@@ -25,6 +25,7 @@ class Timer : protected Pointers {
     START = -1,
     TOTAL = 0,
     PAIR,
+    IONIZATION,
     BOND,
     KSPACE,
     NEIGH,

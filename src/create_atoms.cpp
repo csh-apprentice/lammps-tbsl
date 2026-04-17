@@ -54,7 +54,7 @@ static constexpr double INV_P_CONST = 0.7548777;
 static constexpr double INV_SQ_P_CONST = 0.5698403;
 static constexpr int DEFAULT_MAXTRY = 1000;
 
-enum { BOX, REGION, SINGLE, RANDOM, MESH };
+enum { BOX, REGION, SINGLE, RANDOM,UNUNIFORM, MESH };
 enum { ATOM, MOLECULE };
 enum { COUNT, INSERT, INSERT_SELECTED };
 enum { NONE, RATIO, SUBSET };
@@ -128,7 +128,32 @@ void CreateAtoms::command(int narg, char **arg)
       region->prematch();
     }
     iarg = 5;
-  } else if (strcmp(arg[1], "mesh") == 0) {
+  //This ununiform distribution form is taken from the Ho-Young's series of papers.
+  } else if (strcmp(arg[1], "ununiform") == 0) {
+    style = UNUNIFORM;
+    if (narg < 7) utils::missing_cmd_args(FLERR, "create_atoms ununiform", error);
+    nununiform = utils::inumeric(FLERR, arg[2], false, lmp);
+    //nrandom=nununiform;
+    if (nununiform < 0) error->all(FLERR, "Illegal create_atoms number of ununiform atoms {}", nununiform);
+    seed = utils::inumeric(FLERR, arg[3], false, lmp);
+    if (seed <= 0) error->all(FLERR, "Illegal create_atoms ununiform random seed {}", seed);
+    if (strcmp(arg[4], "NULL") == 0)
+      region = nullptr;
+    else {
+      region = domain->get_region_by_id(arg[4]);
+      if (!region) error->all(FLERR, "Create_atoms region {} does not exist", arg[4]);
+      region->init();
+      region->prematch();
+    }
+    a = utils::numeric(FLERR, arg[5], false, lmp);
+    c=  utils::numeric(FLERR, arg[6], false, lmp);
+    Rb= utils::numeric(FLERR, arg[7], false, lmp);
+    if (Rb <= 0) error->all(FLERR, "Illegal create_atoms ununiform bubble radius {}", Rb);
+    res = utils::numeric(FLERR, arg[8], false, lmp);
+    if (res < 0) error->all(FLERR, "Illegal resolution in ununiform res {}", res);
+    iarg = 9;
+  }
+   else if (strcmp(arg[1], "mesh") == 0) {
     style = MESH;
     if (narg < 3) utils::missing_cmd_args(FLERR, "create_atoms mesh", error);
     meshfile = arg[2];
@@ -248,7 +273,7 @@ void CreateAtoms::command(int narg, char **arg)
         error->all(FLERR, "Illegal create_atoms subset settings");
       iarg += 3;
     } else if (strcmp(arg[iarg], "overlap") == 0) {
-      if (style != RANDOM)
+      if (style != RANDOM && style!=UNUNIFORM)
         error->all(FLERR, "Create_atoms overlap can only be used with random style");
       if (iarg + 2 > narg) error->all(FLERR, "Illegal create_atoms command");
       overlap = utils::numeric(FLERR, arg[iarg + 1], false, lmp);
@@ -256,7 +281,7 @@ void CreateAtoms::command(int narg, char **arg)
       overlapflag = 1;
       iarg += 2;
     } else if (strcmp(arg[iarg], "maxtry") == 0) {
-      if (style != RANDOM)
+      if (style != RANDOM && style!=UNUNIFORM)
         error->all(FLERR, "Create_atoms maxtry can only be used with random style");
       if (iarg + 2 > narg) error->all(FLERR, "Illegal create_atoms command");
       maxtry = utils::inumeric(FLERR, arg[iarg + 1], false, lmp);
@@ -459,6 +484,13 @@ void CreateAtoms::command(int narg, char **arg)
     add_single();
   else if (style == RANDOM)
     add_random();
+  else if (style== UNUNIFORM) {
+    xlist=new double[int(res)+1];
+    ylist=new double[int(res)+1];
+    Ziggurat();
+    add_ununiform();
+    }
+    //add_random();
   else if (style == MESH)
     add_mesh(meshfile);
   else
@@ -634,6 +666,11 @@ void CreateAtoms::command(int narg, char **arg)
   delete[] xstr;
   delete[] ystr;
   delete[] zstr;
+
+  if (style==UNUNIFORM){
+    delete[] xlist;
+    delete[] ylist;
+  }
 
   // for MOLECULE mode:
   // create special bond lists for molecular systems,
@@ -857,6 +894,216 @@ void CreateAtoms::add_random()
   // clean-up
 
   delete random;
+}
+
+/* ----------------------------------------------------------------------
+   add Nrandom atoms in the given ununiform assumption
+------------------------------------------------------------------------- */
+
+void CreateAtoms::add_ununiform()
+{
+  double xlo, ylo, zlo, xhi, yhi, zhi, zmid;
+  double delx, dely, delz, distsq, odistsq;
+  double lamda[3], *coord;
+  double *boxlo, *boxhi;
+  double xb=15/(3*a/c+5);
+  double xa=xb*a/c;   //pdf=xa*x^4+xb*x^2
+
+  if (overlapflag) {
+    double odist = overlap;
+    if (mode == MOLECULE) odist += onemol->molradius;
+    odistsq = odist * odist;
+  }
+
+  // random number generator, same for all procs
+  // warm up the generator 30x to avoid correlations in first-particle
+  // positions if runs are repeated with consecutive seeds
+
+  auto random = new RanPark(lmp, seed);
+  for (int ii = 0; ii < 30; ii++) random->uniform();
+
+  // bounding box for atom creation
+  // in real units, even if triclinic
+  // only limit bbox by region if its bboxflag is set (interior region)
+
+  if (triclinic == 0) {
+    xlo = domain->boxlo[0];
+    xhi = domain->boxhi[0];
+    ylo = domain->boxlo[1];
+    yhi = domain->boxhi[1];
+    zlo = domain->boxlo[2];
+    zhi = domain->boxhi[2];
+    zmid = zlo + 0.5 * (zhi - zlo);
+  } else {
+    xlo = domain->boxlo_bound[0];
+    xhi = domain->boxhi_bound[0];
+    ylo = domain->boxlo_bound[1];
+    yhi = domain->boxhi_bound[1];
+    zlo = domain->boxlo_bound[2];
+    zhi = domain->boxhi_bound[2];
+    zmid = zlo + 0.5 * (zhi - zlo);
+    boxlo = domain->boxlo_lamda;
+    boxhi = domain->boxhi_lamda;
+  }
+
+  if (region && region->bboxflag) {
+    xlo = MAX(xlo, region->extent_xlo);
+    xhi = MIN(xhi, region->extent_xhi);
+    ylo = MAX(ylo, region->extent_ylo);
+    yhi = MIN(yhi, region->extent_yhi);
+    zlo = MAX(zlo, region->extent_zlo);
+    zhi = MIN(zhi, region->extent_zhi);
+  }
+
+  if (xlo > xhi || ylo > yhi || zlo > zhi)
+    error->all(FLERR, "No overlap of box and region for create_atoms");
+
+  // insert Nrandom new atom/molecule into simulation box
+
+  int ntry, success;
+  int ninsert = 0;
+  double r=0.0; //radius for the current particle
+
+  // debug info
+  int total_attempts = 0;
+  int pdf_rejects = 0;
+  int region_rejects = 0;
+  int overlap_rejects = 0;
+  int successful_overlap_checks = 0;
+
+
+  for (int i = 0; i < nununiform; i++) {
+
+    // attempt to insert an atom/molecule up to maxtry times
+    // criteria for insertion: region, variable, triclinic box, overlap
+
+    success = 0;
+    ntry = 0;
+    total_attempts++;
+
+    while (ntry < maxtry) {
+      ntry++;
+
+      int index=floor(random->uniform()*res);   // index from [0,res-1]
+      double xtest=xlist[index]+random->uniform()*(1-xlist[index]);
+      double ytest=ylist[index]+random->uniform()*(ylist[index+1]-ylist[index]);
+      if (xtest>xlist[index+1] || ytest>xa*pow(xtest,4)+xb*pow(xtest,2))
+      {
+        pdf_rejects++;
+        r=xtest;
+      }
+      else 
+        continue;  // if not obey the Ziggurat, just move to the next particle
+        
+            
+      double theta=2*M_PI*random->uniform();
+      double z=2*random->uniform()-1;
+      double x=sqrt(1.0-z*z)*cos(theta);
+      double y=sqrt(1.0-z*z)*sin(theta);
+
+      xone[0] = x*r*Rb;
+      xone[1] = y*r*Rb;
+      xone[2] = z*r*Rb;
+      if (domain->dimension == 2) xone[2] = zmid;
+
+      if (region && (region->match(xone[0], xone[1], xone[2]) == 0)) {region_rejects++; continue;}
+      if (varflag && vartest(xone) == 0) {region_rejects++; continue;}
+
+      if (triclinic) {
+        domain->x2lamda(xone, lamda);
+        coord = lamda;
+        if (coord[0] < boxlo[0] || coord[0] >= boxhi[0] || coord[1] < boxlo[1] ||
+            coord[1] >= boxhi[1] || coord[2] < boxlo[2] || coord[2] >= boxhi[2])
+          continue;
+      } else {
+        coord = xone;
+      }
+
+      // check for overlap of new atom/mol with all other atoms
+      //   including prior insertions
+      // minimum_image() needed to account for distances across PBC
+      // new molecule only checks its center pt against others
+      //   odistsq is expanded for mode=MOLECULE to account for molecule size
+
+      if (overlapflag) {
+        double **x = atom->x;
+        int nlocal = atom->nlocal;
+
+        int reject = 0;
+        for (int i = 0; i < nlocal; i++) {
+          delx = xone[0] - x[i][0];
+          dely = xone[1] - x[i][1];
+          delz = xone[2] - x[i][2];
+          domain->minimum_image(delx, dely, delz);
+          distsq = delx * delx + dely * dely + delz * delz;
+          if (distsq < odistsq) {
+            reject = 1;
+            successful_overlap_checks += nlocal;
+            break;
+          }
+        }
+        int reject_any;
+        MPI_Allreduce(&reject, &reject_any, 1, MPI_INT, MPI_MAX, world);
+        if (reject_any) continue;
+      }
+
+      // all tests passed
+
+      success = 1;
+      break;
+    }
+
+    // insertion failed, advance to next atom/molecule
+
+    if (!success) continue;
+
+    // insertion criteria were met
+    // if final atom position is in my subbox, create it
+    // if triclinic, coord is now in lamda units
+
+    ninsert++;
+
+    if (coord[0] >= sublo[0] && coord[0] < subhi[0] && coord[1] >= sublo[1] &&
+        coord[1] < subhi[1] && coord[2] >= sublo[2] && coord[2] < subhi[2]) {
+      if (mode == ATOM) {
+        atom->avec->create_atom(ntype, xone);
+      } else {
+        add_molecule(xone);
+      }
+    }
+  }
+
+  //debug
+  long long counters[6] = {total_attempts, pdf_rejects, region_rejects, overlap_rejects, successful_overlap_checks, ninsert};
+  long long global[6];
+
+  MPI_Reduce(counters, global, 6, MPI_LONG_LONG, MPI_SUM, 0, world);
+  if (comm->me == 0) {
+  char msg[512];
+  snprintf(msg, sizeof(msg),
+           "Create atoms: DEBUG STATS:\n"
+           "  Total attempts:           %lld\n"
+           "  PDF rejections:           %lld\n"
+           "  Region/var rejections:    %lld\n"
+           "  Overlap rejections:       %lld\n"
+           "  Overlap checks performed: %lld\n"
+           "  Successful insertions:    %lld\n",
+           global[0], global[1], global[2], global[3], global[4], global[5]);
+  utils::logmesg(lmp, msg);
+  }
+
+
+
+  // warn if did not successfully insert Nrandom atoms/molecules
+
+  if (ninsert < nununiform && comm->me == 0)
+    error->warning(FLERR, "Only inserted {} particles out of {}", ninsert, nununiform);
+
+  // clean-up
+
+  delete random;
+
+  utils::logmesg(lmp, "Create atoms:  Finish adding ununiform particles!\n");
 }
 
 /* ----------------------------------------------------------------------
@@ -1426,4 +1673,99 @@ int CreateAtoms::vartest(double *x)
 
   if (value == 0.0) return 0;
   return 1;
+}
+
+void CreateAtoms::Ziggurat()
+{
+  double tolerance=1/(res*res);
+  int countmax=50;
+  double error=1.0;
+  double xb=15/(3*a/c+5);
+  double xa=xb*a/c;   //pdf=xa*x^4+xb*x^2
+  double xhigh=2*findroot(xa,xb,0.05,1/res,tolerance,countmax); //initial overestimation on the x0
+  //prblem related to find root or other parameters
+  double debug=pow(xhigh/2,4)*xa+pow(xhigh/2,2)*xb-tolerance;
+  //utils::logmesg(lmp, "Create atoms:  the xhigh is {}, tolerance is {}, debug is {} !\n",xhigh,tolerance,debug);
+  double xlow=0.0; // initial underestimation on the x0
+  double xguess=(xhigh+xlow)/2; // guess for x0
+  int count=0;
+  xlist[0]=ylist[0]=0.0;
+
+  while (count<countmax){
+    double xguess2=xguess*xguess;
+    double xguess3=xguess*xguess2;
+    double xguess4=xguess2*xguess2;
+    double xguess5=xguess2*xguess3;
+
+    xlist[1]=xguess;
+    ylist[1]=xguess4*xa+xguess2*xb;
+    // guess the unit area in Zigguart 
+    double Aguess=(1-xlist[1])*ylist[1]+xguess5/5*xa+xguess3/3*xb; 
+    for (int i=2; i<int(res)+1;i++){
+        ylist[i]=ylist[i-1]+Aguess/(1-xlist[i-1]);
+        xlist[i]=findroot(xa,xb,xlist[i-1],ylist[i],tolerance,countmax);  // use the previous x as an estimation
+        if(ylist[i]>xa+xb){
+            xhigh=xguess;
+            xguess=(xlow+xhigh)/2;
+            ylist[int(res)]=xa+xb+1;   // break the outer loop because of the overestimation
+            break;  
+        }
+    }
+    error=fabs(ylist[int(res)]-xa-xb);
+    if (error<tolerance)
+        break;        // break the outer loop whent he error is in tolerance
+    else if(ylist[int(res)]<xa+xb){
+        xlow=xguess;
+        xguess=(xlow+xhigh)/2;
+    }
+    count=count+1;
+  }
+
+  if(count==countmax){
+    utils::logmesg(lmp, "Create atoms: Countmax {} reached in Ziggurat Algorithm, fatal error may occured!\n",
+                     countmax);
+  }
+
+  // finalize the xlist and the ylist
+  //xguess=0.0225;
+  xlist[1]=xguess;
+  ylist[1]=xguess*xguess*xguess*xguess*xa+xguess*xguess*xb;
+  double Aguess=(1-xlist[1])*ylist[1]+pow(xguess,5)/5*xa+pow(xguess,3)/3*xb;
+  for(int i=2; i<int(res)+1;i++){
+    ylist[i]=ylist[i-1]+Aguess/(1-xlist[i-1]);
+    xlist[i]=findroot(xa,xb,xlist[i-1],ylist[i],tolerance,countmax);
+  }
+
+  utils::logmesg(lmp, "Create atoms:  Finish Ziggurat!\n");
+}
+
+double CreateAtoms::findroot(double xa,double xb,double xinit,double y,double tolerance,int countmax)
+{
+  // newton method
+  double xi=xinit;
+  int count=0;
+  while(fabs(pow(xi,4)*xa+pow(xi,2)*xb-y)>tolerance && count<countmax) {
+    //utils::logmesg(lmp, "Find Root Enter!\n");
+    double fx=pow(xi,4)*xa+pow(xi,2)*xb-y;
+    double Dfx=4*pow(xi,3)*xa+2*xi*xb;
+    xi=xi-fx/Dfx;
+    count=count+1;
+  }
+  return xi;
+}
+
+double CreateAtoms::findroot_debug(double xa,double xb,double xinit,double y,double tolerance,int countmax)
+{
+  // newton method
+  double xi=xinit;
+  int count=0;
+  while(fabs(pow(xi,4)*xa+pow(xi,2)*xb-y)>tolerance && count<countmax) {
+    
+    double fx=pow(xi,4)*xa+pow(xi,2)*xb-y;
+    double Dfx=4*pow(xi,3)*xa+2*xi*xb;
+    xi=xi-fx/Dfx;
+    utils::logmesg(lmp, "xi is {}, fx is {}, dfx is {}!\n",xi,fx,Dfx);
+    count=count+1;
+  }
+  return xi;
 }

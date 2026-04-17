@@ -38,6 +38,10 @@ class Velocity : public Command {
   int dist_flag, sum_flag, momentum_flag, rotation_flag;
   int bias_flag, loop_flag, scale_flag;
   double xscale, yscale, zscale;
+  double Tb0,Tbl;  // The center/boundary temperature in Ho-YOung's method
+  double A,B;   //parameters A and B in Ho-Young's method
+  double eta,Rb;  //eta and Rb in Ho-Young's method 
+  double ensem_scale;  // ensemble scaling paramters in Ho-Young's method
   class Fix *rigid_fix;
   class Compute *temperature;
 
@@ -47,6 +51,7 @@ class Velocity : public Command {
   void zero(int, char **);
 
   void rescale(double, double);
+  void rescale_young(double,double);
   void zero_momentum();
   void zero_rotation();
 };
