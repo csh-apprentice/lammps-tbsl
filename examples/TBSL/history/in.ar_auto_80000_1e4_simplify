@@ -1,0 +1,171 @@
+# LAMMPS input script for simulating He molecules in a bubble with collision behavior
+
+# --- Initialization ---
+clear 
+units real
+dimension 3
+boundary s s s
+atom_style full
+
+# --- Constants for Ar/He ---
+variable pi equal 3.1415926
+variable boltzmann equal 8.314462618  # J/(mol*K)
+variable kB equal 1.380649e-23        # J/K
+variable NA equal 6.02214076e23       # 1/mol
+variable m equal 39.95                # g/mol
+variable d equal 3.66                 # Angstroms
+variable epslion_lj equal 116.81
+variable epsilon equal ${boltzmann}*${epslion_lj}*0.00023901
+variable epsilon_water_o equal 116.402
+variable epsilon_water equal ${boltzmann}*${epsilon_water_o}*0.00023901
+variable sigma equal 3.401
+variable sigma_water equal 3.463
+
+# --- Ensemble Particle Parameters ---
+variable N_ensem equal 1e4
+variable initialR equal 4.5e-6
+variable Tinfty equal 300
+variable Pinfty equal 101325
+variable alpha1 equal 0.148e-6
+variable V equal 4/3*${pi}*${initialR}^3
+variable N equal ${Pinfty}*$V/(${kB}*${Tinfty})
+variable scalefactor equal $N/${N_ensem}
+variable rscalefactor equal ${scalefactor}^(1.0/3.0)
+variable d_ensem equal ${rscalefactor}*$d
+variable m_ensem equal ${scalefactor}*$m
+variable epsilon_ensem equal ${epsilon}*${scalefactor}
+variable epsilon_water_ensem equal ${epsilon_water}*${scalefactor}
+variable sigma_ensem equal ${sigma}*${rscalefactor}
+variable sigma_water_ensem equal ${sigma_water}*${rscalefactor}
+
+# --- Temperature Profile for 100ps ---
+variable Tb0 equal 2.5301e+03
+variable Tbl equal 315.3043
+variable delta equal 2520.84869818185
+variable delta_1000 equal 2520.56320718052
+variable vdelta equal (${delta_1000}-${delta})/1000
+variable MAX_RADIUS equal 3.0870e+04
+variable velocitystart equal -0.00316298702544561
+
+# --- Geometry Definitions ---
+variable box_boundary equal ${MAX_RADIUS}+2*${d_ensem}
+variable MAX_RADIUS_OUT equal ${MAX_RADIUS}+${d_ensem}
+variable MAX_RADIUS_IN equal ${MAX_RADIUS}-${d_ensem}
+variable MAX_RADIUS_CORE equal ${MAX_RADIUS}-2*${d_ensem}
+
+# --- Heat Conduction Properties ---
+variable a equal -7.69e-17
+variable c equal 1.9233e-16
+variable A equal 2.681e-5
+variable B equal 1.346e-2
+variable kl equal 0.61
+variable Rb equal ${MAX_RADIUS}
+variable eta equal (${Rb}/${delta})*${kl}/$B
+
+# --- Ionization Energies ---
+variable io1_ensem equal 1520.0*${scalefactor}
+variable io2_ensem equal 2670.0*${scalefactor}
+variable io3_ensem equal 3930.0*${scalefactor}
+variable io4_ensem equal 5770.0*${scalefactor}
+variable io5_ensem equal 7240.0*${scalefactor}
+variable io6_ensem equal 8780.0*${scalefactor}
+variable io7_ensem equal 12000.0*${scalefactor}
+variable io8_ensem equal 13800.0*${scalefactor}
+variable cutoff_ensem equal 10.0*${rscalefactor}
+
+# --- Create Simulation Regions ---
+region boundary sphere 0.0 0.0 0.0 ${box_boundary} side in
+region boundary_out sphere 0.0 0.0 0.0 ${MAX_RADIUS_OUT} side in
+region boundary_in sphere 0.0 0.0 0.0 ${MAX_RADIUS_IN} side in
+region bubble_sphere sphere 0.0 0.0 0.0 ${MAX_RADIUS} side in
+create_box 1 boundary
+create_atoms 1 ununiform ${N_ensem} 88 bubble_sphere ${a} ${c} ${MAX_RADIUS_IN} 512 overlap ${d_ensem} maxtry 50
+
+group another_all region boundary_in
+
+# --- Atom Properties ---
+fix mass all property/atom rmass ghost yes
+fix timecollide all property/atom i_tlast
+fix ionlabel all property/atom i_label ghost yes
+fix ion_mindist all property/atom d_mindist ghost yes
+set type 1 mass ${m_ensem}
+set atom * i_tlast 0
+set atom * i2_label -1
+set atom * d_mindist 1e20
+set atom * charge 0.0
+
+# --- Velocity Initialization ---
+variable Tblensem equal ${Tbl}*${scalefactor}
+print "Tb0 IS ${Tb0}"
+print "densem IS ${d_ensem}"
+velocity all create ${Tinfty} 4928459 dist young ${Tb0} ${Tbl} ${A} ${B} ${eta} ${MAX_RADIUS_IN} ${scalefactor}
+
+# --- Interaction Style ---
+variable cutoff equal 2*${d_ensem}
+variable thickness equal ${MAX_RADIUS}/2
+pair_style lj/cutio/coul/dsf 0.2 ${cutoff} ${cutoff}
+pair_coeff * * 8 ${io1_ensem} ${io2_ensem} ${io3_ensem} ${io4_ensem} ${io5_ensem} ${io6_ensem} ${io7_ensem} ${io8_ensem} ${epsilon_ensem} ${sigma_ensem}
+set type 1 charge 0.0
+comm_modify vel yes
+
+# --- Simulation Parameters ---
+variable timestep equal 1.0
+variable Nstep equal 1e4
+variable Steps2run equal 1e7/${timestep}
+minimize 1.0e-4 1.0e-4 1000 1000
+
+# --- Time Evolution ---
+timestep ${timestep}
+fix 1 another_all nve
+
+# --- Region & Output Variables ---
+variable RADIUS equal ${MAX_RADIUS_OUT}
+variable RADIUSIN equal ${MAX_RADIUS}-${cutoff}
+variable tstart equal 204790-50
+
+region km_sphere kmsphere 0.0 0.0 0.0 ${MAX_RADIUS} ${velocitystart} 1481 1000 101325 0.072 0.001 ${cutoff} 26.5e3 1.3 ${tstart} ${scalefactor} ${Tinfty} ${alpha1} ${vdelta} ${delta} side in
+
+# --- Output and Derived Observables ---
+compute peratom all stress/atom NULL
+variable SLradius equal slradius(all,km_sphere)
+variable RCORE equal v_SLradius/10.0
+region core sphere 0.0 0.0 0.0 v_RCORE side in
+
+variable SLvradius equal slvradius(all,km_sphere)
+variable SLcount equal slcount(all,km_sphere)
+variable SLpressure equal slpressure(all,km_sphere)
+variable SLpb equal slpb(all,km_sphere)
+variable SLTblgas equal slgastemp(all,km_sphere)/${scalefactor}
+variable SLTwall equal slwalltemp(all,km_sphere)/${scalefactor}
+variable SLdelta equal sldelta(all,km_sphere)
+variable SLnumatoms equal slnumatoms(all,km_sphere)
+variable SLvdelta equal slvdelta(all,km_sphere)
+variable SLdebug equal sldebug(all,km_sphere)
+variable SLsteps equal slsteps(all,km_sphere)
+
+compute coretemp all temp/region core
+variable corecount equal count(all,core)
+compute pcore all reduce/region core sum c_peratom[1] c_peratom[2] c_peratom[3]
+variable presscore equal -(c_pcore[1]+c_pcore[2]+c_pcore[3])/(4.0*${pi}*${RCORE}^3)
+
+thermo 1000
+thermo_style custom step dt time cpu vcpu tpcpu spcpu temp etotal press c_coretemp v_corecount v_SLradius v_SLdebug v_SLvradius v_SLcount v_SLpressure v_SLpb v_SLTblgas v_SLTwall v_SLdelta v_SLnumatoms v_presscore v_SLvdelta v_SLsteps
+
+# --- Wall and Region Forces ---
+fix wall all wall/mdhb km_sphere lj126 ${epsilon_water_ensem} ${sigma_water_ensem} ${cutoff} 1.0 ${scalefactor} 1000.0 4180.0 300.0 ${Tbl}
+fix_modify wall virial yes
+
+# --- Time Control and Exit ---
+reset_timestep 0
+fix rebalance all balance 100000 1.0 shift xyz 10 1.1
+
+variable tmin equal 1.0
+variable tmax equal 16.0
+variable estimate_max_temp equal 80000
+variable estimate_max_velocity equal sqrt(${estimate_max_temp}*3.0*${kB}*${NA}*1e-7/${m})
+variable estimate_Xmax equal ${estimate_max_velocity}*${tmin}
+
+fix adaptive_step all dt/reset 1000 ${tmin} ${tmax} ${estimate_Xmax}
+fix whenhalt all halt 1000 v_SLsteps > 1e7
+
+run ${Steps2run}

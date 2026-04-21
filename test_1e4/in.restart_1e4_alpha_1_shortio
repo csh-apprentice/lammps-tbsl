@@ -1,0 +1,289 @@
+print ">>> TBSL 1e4 alpha=1 short-ionization RESTART" screen yes
+# ======================================================================
+# Restart input for the 1e4-particle SL simulation (alpha_t=1, shortio).
+#
+# How to use:
+#   1. Run the main simulation:
+#        sbatch run_1e4_alpha1_shortio.sh
+#   2. After it finishes, pick a restart step that is a multiple of the
+#      dump frequency (500000): e.g. 1000000.
+#   3. Generate the rough* variable block:
+#        python ../../scaffold/read_restart.py run_1e4_alpha1_shortio.lammps 1000000
+#   4. Paste the output into this file, replacing the PLACEHOLDER block
+#      below (between the two "PASTE START / PASTE END" markers).
+#   5. Submit the restart job:
+#        sbatch run_1e4_restart.sh
+#   6. Verify continuity using:
+#        python ../../scaffold/compare_restart.py \
+#            run_1e4_alpha1_shortio.lammps \
+#            run_1e4_restart.lammps \
+#            1000000
+# ======================================================================
+
+clear
+units real
+dimension 3
+boundary s s s
+atom_style full
+
+# --- Constants for Ar ---
+variable pi equal 3.1415926
+variable boltzmann equal 8.314462618
+variable kB equal 1.380649e-23
+variable NA equal 6.02214076e23
+variable m equal 39.95
+variable d equal 3.66
+variable epslion_lj equal 116.81
+variable epsilon equal ${boltzmann}*${epslion_lj}*0.00023901
+variable epsilon_water_o equal 116.402
+variable epsilon_water equal ${boltzmann}*${epsilon_water_o}*0.00023901
+variable sigma equal 3.401
+variable sigma_water equal 3.463
+
+# --- Ensemble Particle Parameters ---
+variable N_ensem equal 1e4
+variable initialR equal 4.5e-6
+variable Tinfty equal 300
+variable Pinfty equal 101325
+variable alpha1 equal 0.148e-6
+variable V equal 4/3*${pi}*${initialR}^3
+variable N equal ${Pinfty}*$V/(${kB}*${Tinfty})
+variable scalefactor equal $N/${N_ensem}
+variable halfscalefactor equal ${scalefactor}^(1.0/2.0)
+variable rscalefactor equal ${scalefactor}^(1.0/3.0)
+variable d_ensem equal ${rscalefactor}*$d
+variable m_ensem equal ${scalefactor}*$m
+variable epsilon_ensem equal ${epsilon}*${scalefactor}
+variable epsilon_water_ensem equal ${epsilon_water}*${scalefactor}
+variable sigma_ensem equal ${sigma}*${rscalefactor}
+variable sigma_water_ensem equal ${sigma_water}*${rscalefactor}
+
+# --- Bubble Initial Conditions (reference, used for tstart/eta only) ---
+variable Tb0 equal 2.530107262855020e+03
+variable Tbl equal 3.153042568761739e+02
+variable delta equal 2520.84869818185
+variable vdelta equal -2.836392012821834e-04
+variable MAX_RADIUS equal 3.086969205287614e+04
+variable velocitystart equal -0.00316298702544561
+
+# --- Geometry ---
+variable box_boundary equal ${MAX_RADIUS}+2*${d_ensem}
+variable MAX_RADIUS_OUT equal ${MAX_RADIUS}+${d_ensem}
+variable MAX_RADIUS_IN equal ${MAX_RADIUS}-${d_ensem}
+
+# --- Heat Conduction Properties ---
+variable a equal -7.69e-17
+variable c equal 1.9233e-16
+variable A equal 2.681e-5
+variable B equal 1.346e-2
+variable kl equal 0.61
+variable Rb equal ${MAX_RADIUS}
+variable eta equal (${Rb}/${delta})*${kl}/$B
+
+# --- Ionization Energies ---
+variable io1_ensem equal 1520.0*${scalefactor}
+variable io2_ensem equal 2670.0*${scalefactor}
+variable io3_ensem equal 3930.0*${scalefactor}
+variable io4_ensem equal 5770.0*${scalefactor}
+variable io5_ensem equal 7240.0*${scalefactor}
+variable io6_ensem equal 8780.0*${scalefactor}
+variable io7_ensem equal 12000.0*${scalefactor}
+variable io8_ensem equal 13800.0*${scalefactor}
+
+# --- Regions ---
+region boundary sphere 0.0 0.0 0.0 ${box_boundary} side in
+region boundary_out sphere 0.0 0.0 0.0 ${MAX_RADIUS_OUT} side in
+region boundary_in sphere 0.0 0.0 0.0 ${MAX_RADIUS_IN} side in
+region bubble_sphere sphere 0.0 0.0 0.0 ${MAX_RADIUS} side in
+
+# --- Load structure from the lattice data file (atom positions overwritten below) ---
+read_data /anvil/projects/x-phy250136/lammps-tbsl/test_1e4/initialize_lattice_1e4.lammpsdata
+
+atom_modify sort 0 0.0
+
+group another_all region boundary_out
+
+fix mass all property/atom rmass ghost yes
+fix timecollide all property/atom i_tlast
+fix ionlabel all property/atom i_label ghost yes
+fix ion_mindist all property/atom d_mindist ghost yes
+
+mass * ${m_ensem}
+set atom * mass ${m_ensem}
+set atom * i_tlast 0
+set atom * i2_label -1
+set atom * d_mindist 1e20
+set atom * charge 0.0
+
+# --- Cutoff distances (must match main run) ---
+variable cutoff equal 2.0*${d_ensem}
+variable cutoffcoul equal 2.0*${d_ensem}
+
+set type 1 charge 0.0
+comm_modify vel yes
+
+# --- Simulation Parameters ---
+variable timestep equal 1.0
+variable Nstep equal 5e5
+variable Steps2run equal 1e7/${timestep}
+
+# --- Read per-rank dump files to restore atom state (positions, velocities, forces) ---
+# Format: read_sldump <pattern> <step> <fields...> nfile <nranks>
+# The % wildcard is replaced by the MPI rank index (0 … nranks-1).
+# IMPORTANT: nfile must match the number of MPI ranks used in the original run.
+read_sldump /anvil/projects/x-phy250136/lammps-tbsl/test_1e4/dumpfiles/1e4_%.1000000.lammpstrj 1000000 x y z vx vy vz fx fy fz q i_tlast i2_label d_mindist nfile 16
+
+# --- Restart dump output ---
+dump myDump all custom ${Nstep} /anvil/projects/x-phy250136/lammps-tbsl/test_1e4/dumpfiles_restart/1e4_%.*.lammpstrj id type x y z vx vy vz fx fy fz q i_tlast i2_label d_mindist
+dump_modify myDump format 3 "%.31f"
+dump_modify myDump format 4 "%.31f"
+dump_modify myDump format 5 "%.31f"
+dump_modify myDump format 6 "%.31f"
+dump_modify myDump format 7 "%.31f"
+dump_modify myDump format 8 "%.31f"
+dump_modify myDump format 9 "%.31f"
+dump_modify myDump format 10 "%.31f"
+dump_modify myDump format 11 "%.31f"
+
+# ======================================================================
+# PASTE START — output of: python ../../scaffold/read_restart.py \
+#                               run_1e4_alpha1_shortio.lammps <step>
+# ======================================================================
+
+variable roughslradius    equal 15880.6094230987382616149261593818665
+variable roughslradiusold equal 15880.6273668514368182513862848281860
+variable roughslvraius    equal -0.0071595543963562310874060301558
+variable roughsldelta     equal 1177.4701272117995358712505549192429
+variable roughsldeltaold  equal 1177.4715746059139291901374235749245
+variable roughslvdelta    equal -0.0005775095472875782422889079371
+variable roughslTbl       equal 424.2673126047630489665607456117868
+variable roughslTblgas    equal 1809.8659843808038658607983961701393
+
+variable roughth_radius   equal 0.0000016354393414740321724138838
+variable roughth_vradius  equal -632.2207501769111104295006953179836
+variable roughth_aradius  equal -197363595842.9922485351562500000000000000000
+variable roughth_Tb0      equal 8543.8283915678894118173047900199890
+variable roughth_delta    equal 0.0000001177468679816777374230142
+
+variable sl_timestep      equal 1000000.0
+variable reset_time       equal 3358690.1583897611126303672790527343750
+variable sl_time          equal ${reset_time}*1e-15
+variable reset_timestep   equal ${sl_timestep}
+variable reset_dt         equal 2.5085026183711209846194378769724
+variable roughpB_old_init equal 8845512.6291788704693317413330078125000
+
+# ======================================================================
+# PASTE END
+# ======================================================================
+
+# --- Format variables to full double precision before passing to kmsphere ---
+variable slradius     format roughslradius    %.31g
+variable slradiusold  format roughslradiusold %.31g
+variable slvraius     format roughslvraius    %.31g
+variable sldelta      format roughsldelta     %.31g
+variable sldeltaold   format roughsldeltaold  %.31g
+variable slvdelta     format roughslvdelta    %.31g
+variable slTbl        format roughslTbl       %.31g
+variable slTblgas     format roughslTblgas    %.31g
+
+variable th_radius    format roughth_radius   %.31g
+variable th_vradius   format roughth_vradius  %.31g
+variable th_aradius   format roughth_aradius  %.31g
+variable th_Tb0       format roughth_Tb0      %.31g
+variable th_delta     format roughth_delta    %.31g
+variable pB_old_init  format roughpB_old_init %.31g
+
+# --- Resume at the exact checkpoint timestep ---
+reset_timestep ${reset_timestep} time ${reset_time}
+timestep ${reset_dt}
+
+fix rebalance all balance 100000 1.0 shift xyz 10 1.1
+fix 1 another_all nve
+
+# --- KM Sphere Region: seeded with saved ODE state, not t=0 initial conditions ---
+variable tstart equal 204790-50
+
+region km_sphere kmsphere 0.0 0.0 0.0 ${slradius} ${slradiusold} ${slvraius} 1481 1000 101325 0.072 0.001 ${cutoff} 26.5e3 1.3 ${tstart} ${scalefactor} ${Tinfty} ${alpha1} ${slvdelta} ${sldelta} ${sldeltaold} ${th_radius} ${th_vradius} ${th_aradius} ${th_Tb0} ${th_delta} ${sl_time} ${pB_old_init} side in
+
+# --- Observables ---
+compute peratom all stress/atom NULL
+variable SLradius equal slradius(all,km_sphere)
+variable SLradiusold equal slradiusold(all,km_sphere)
+variable innerradius equal v_SLradius-${cutoff}
+region outterbubble sphere 0.0 0.0 0.0 v_SLradius side in
+region innerbubble sphere 0.0 0.0 0.0 v_innerradius side out
+region shell intersect 2 outterbubble innerbubble
+variable RCORE equal v_SLradius/10.0
+region core sphere 0.0 0.0 0.0 v_RCORE side in
+
+variable SLvradius equal slvradius(all,km_sphere)
+variable SLcount equal slcount(all,km_sphere)
+variable SLpB equal slpB(all,km_sphere)
+variable SLpBold equal slpBold(all,km_sphere)
+variable SLpb equal slpb(all,km_sphere)
+variable SLTblgas equal slgastemp(all,km_sphere)/${scalefactor}
+variable SLTwall equal slwalltemp(all,km_sphere)/${scalefactor}
+variable SLdelta equal sldelta(all,km_sphere)
+variable SLdeltaold equal sldeltaold(all,km_sphere)
+variable SLnumatoms equal slnumatoms(all,km_sphere)
+variable SLvdelta equal slvdelta(all,km_sphere)
+variable SLdebug equal sldebug(all,km_sphere)
+variable SLsteps equal slsteps(all,km_sphere)
+
+variable THradius equal thradius(all,km_sphere)
+variable THvradius equal thvradius(all,km_sphere)
+variable THaradius equal tharadius(all,km_sphere)
+variable THTb0 equal thTb0(all,km_sphere)
+variable THdelta equal thdelta(all,km_sphere)
+
+compute pcore all reduce/slregion core sum c_peratom[1] c_peratom[2] c_peratom[3]
+compute pshell all reduce/slregion shell sum c_peratom[1] c_peratom[2] c_peratom[3]
+compute pbubble all reduce/slregion km_sphere sum c_peratom[1] c_peratom[2] c_peratom[3]
+compute coretemp all temp/region core
+variable corecount equal count(all,core)
+variable shellcount equal count(all,shell)
+
+variable presscore equal -(c_pcore[1]+c_pcore[2]+c_pcore[3])/(4.0*${pi}*v_RCORE^3)
+variable pressshell equal -(c_pshell[1]+c_pshell[2]+c_pshell[3])/(4.0*${pi}*v_SLradius^3-4.0*${pi}*v_innerradius^3)
+variable pressbubble equal -(c_pbubble[1]+c_pbubble[2]+c_pbubble[3])/(4.0*${pi}*v_SLradius^3)
+
+# --- Radial distribution output ---
+variable slvelocity atom sqrt(vx^2+vy^2+vz^2)
+variable slcharge atom q
+variable slvirial atom c_peratom[1]+c_peratom[2]+c_peratom[3]
+compute comdis all chunk/atom bin/sphere 0.0 0.0 0.0 0.0 ${MAX_RADIUS} 100 discard yes
+fix fixcomdis all ave/chunk 1000 1 1000 comdis temp v_slcharge v_slvelocity v_slvirial density/mass density/number file /anvil/projects/x-phy250136/lammps-tbsl/test_1e4/1e4_comdis_restart.out
+
+# --- Wall: alpha_t=1.0, initial wall temperatures from saved log state ---
+# slTblgas = gas temperature at the wall at the restart step (K, per ensemble)
+# slTbl    = liquid temperature just outside the bubble at restart step
+fix wall all wall/mdhb km_sphere lj126 ${epsilon_water_ensem} ${sigma_water_ensem} ${cutoff} 1.0 ${scalefactor} 1000.0 4180.0 300.0 ${slTblgas} ${slTbl}
+fix_modify wall virial yes
+
+# --- Adaptive timestep ---
+variable tmin equal 1.0
+variable tmax equal 8.0
+variable estimate_max_temp equal 80000
+variable estimate_max_velocity equal sqrt(${estimate_max_temp}*3.0*${kB}*${NA}*1e-7/${m})
+variable estimate_Xmax equal ${estimate_max_velocity}*${tmin}
+fix adaptive_step all dt/reset 1000 ${tmin} ${tmax} ${estimate_Xmax}
+
+# --- Halt when KM integrator reaches 1e7 steps ---
+fix whenhalt all halt 1000 v_SLsteps > 1e7
+
+thermo 1000
+thermo_style custom step dt time cpu temp etotal press v_pressbubble v_pressshell c_coretemp v_corecount v_presscore v_shellcount v_SLradius v_SLradiusold v_SLdebug v_SLvradius v_SLcount v_SLpB v_SLpBold v_SLpb v_SLTblgas v_SLTwall v_SLdelta v_SLdeltaold v_SLnumatoms v_SLvdelta v_SLsteps v_THradius v_THvradius v_THaradius v_THTb0 v_THdelta
+thermo_modify format float "%.31f"
+
+# --- ionization is disabled at the restart step itself (force re-use from dump) ---
+# active=0 when step==sl_timestep; active=1 for all subsequent steps
+variable active equal step>${sl_timestep}
+
+variable alpha equal 3.0/${cutoffcoul}
+pair_style lj/cutio/coul/dsf ${alpha} ${cutoff} ${cutoffcoul} ${cutoff}
+pair_coeff * * 8 ${io1_ensem} ${io2_ensem} ${io3_ensem} ${io4_ensem} ${io5_ensem} ${io6_ensem} ${io7_ensem} ${io8_ensem} ${epsilon_ensem} ${sigma_ensem} v_active ${scalefactor}
+
+# --- restartverlet: skips force_clear() at step 0, re-uses forces from dump ---
+run_style restartverlet
+
+run ${Steps2run}

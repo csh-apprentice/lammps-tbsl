@@ -1,0 +1,415 @@
+# LAMMPS input script for simulating He molecules in a bubble with collision behavior
+
+# --- Initialization ---
+clear 
+units real
+dimension 3
+boundary s s s
+atom_style full
+
+# --- Constants for Ar/He ---
+variable pi equal 3.1415926
+variable boltzmann equal 8.314462618  # J/(mol*K)
+variable kB equal 1.380649e-23        # J/K
+variable NA equal 6.02214076e23       # 1/mol
+variable m equal 39.95                # g/mol
+variable d equal 3.66                 # Angstroms
+variable epslion_lj equal 116.81
+variable epsilon equal ${boltzmann}*${epslion_lj}*0.00023901
+variable epsilon_water_o equal 116.402
+variable epsilon_water equal ${boltzmann}*${epsilon_water_o}*0.00023901
+variable sigma equal 3.401
+variable sigma_water equal 3.463
+
+# --- Ensemble Particle Parameters ---
+variable N_ensem equal 1e8
+variable initialR equal 4.5e-6
+variable Tinfty equal 300
+variable Pinfty equal 101325
+variable alpha1 equal 0.148e-6
+variable V equal 4/3*${pi}*${initialR}^3
+variable N equal ${Pinfty}*$V/(${kB}*${Tinfty})
+variable scalefactor equal $N/${N_ensem}
+variable halfscalefactor equal ${scalefactor}^(1.0/2.0)
+variable rscalefactor equal ${scalefactor}^(1.0/3.0)
+variable d_ensem equal ${rscalefactor}*$d
+variable m_ensem equal ${scalefactor}*$m
+variable epsilon_ensem equal ${epsilon}*${scalefactor}
+variable epsilon_water_ensem equal ${epsilon_water}*${scalefactor}
+variable sigma_ensem equal ${sigma}*${rscalefactor}
+variable sigma_water_ensem equal ${sigma_water}*${rscalefactor}
+
+# --- Temperature Profile for 100ps ---
+variable Tb0 equal 2.530107262855020e+03
+variable Tbl equal 3.153042568761739e+02
+variable delta equal 2520.84869818185
+variable vdelta equal -2.836392012821834e-04
+variable MAX_RADIUS equal 3.086969205287614e+04
+variable velocitystart equal -0.00316298702544561
+
+# --- Geometry Definitions ---
+variable box_boundary equal ${MAX_RADIUS}+2*${d_ensem}
+variable MAX_RADIUS_OUT equal ${MAX_RADIUS}+${d_ensem}
+variable MAX_RADIUS_IN equal ${MAX_RADIUS}-${d_ensem}
+variable MAX_RADIUS_CORE equal ${MAX_RADIUS}-2*${d_ensem}
+
+# --- Heat Conduction Properties ---
+variable a equal -7.69e-17
+variable c equal 1.9233e-16
+variable A equal 2.681e-5
+variable B equal 1.346e-2
+variable kl equal 0.61
+variable Rb equal ${MAX_RADIUS}
+variable eta equal (${Rb}/${delta})*${kl}/$B
+
+# --- Ionization Energies ---
+variable io1_ensem equal 1520.0*${scalefactor}
+variable io2_ensem equal 2670.0*${scalefactor}
+variable io3_ensem equal 3930.0*${scalefactor}
+variable io4_ensem equal 5770.0*${scalefactor}
+variable io5_ensem equal 7240.0*${scalefactor}
+variable io6_ensem equal 8780.0*${scalefactor}
+variable io7_ensem equal 12000.0*${scalefactor}
+variable io8_ensem equal 13800.0*${scalefactor}
+variable cutoff_ensem equal 10.0*${rscalefactor}
+
+# --- Create Simulation Regions ---
+region boundary sphere 0.0 0.0 0.0 ${box_boundary} side in
+region boundary_out sphere 0.0 0.0 0.0 ${MAX_RADIUS_OUT} side in
+region boundary_in sphere 0.0 0.0 0.0 ${MAX_RADIUS_IN} side in
+region bubble_sphere sphere 0.0 0.0 0.0 ${MAX_RADIUS} side in
+
+#read_dump /home/shihan/projects/sonoluminescence/lammps/build/lammps_sequence_input/intialize/initialize_1000000.lammpstrj 0 x y z vx vy vz fx fy fz q 
+#create_box 1 boundary
+print ">>> STARTING INPUT"
+print ">>> ABOUT TO READ_DATA"
+read_data /anvil/projects/x-phy250136/Time_Based_SL/build/lammps_sequence_input/initialize/initialize_lattice_1e8.lammpsdata
+print ">>> FINISHED READ_DATA"
+
+#create_atoms 1 ununiform ${N_ensem} 88 bubble_sphere ${a} ${c} ${MAX_RADIUS_IN} 512 overlap ${d_ensem} maxtry 50
+
+atom_modify sort 0 0.0
+neigh_modify binsize 50.0
+print ">>> FINISHED NEIGH MODIFY"
+group another_all region boundary_out
+
+# --- Atom Properties ---
+fix mass all property/atom rmass ghost yes
+fix timecollide all property/atom i_tlast
+fix ionlabel all property/atom i_label ghost yes
+fix ion_mindist all property/atom d_mindist ghost yes
+
+mass * ${m_ensem}
+set atom * mass ${m_ensem}
+set atom * i_tlast 0
+set atom * i2_label -1
+set atom * d_mindist 1e20
+set atom * charge 0.0
+
+
+# --- Velocity Initialization ---
+variable Tblensem equal ${Tbl}*${scalefactor}
+print "Tb0 IS ${Tb0}"
+print "densem IS ${d_ensem}"
+print "Max Radius IS ${MAX_RADIUS}"
+print "Scalefactor IS ${scalefactor}"
+print "rscalefactor IS ${rscalefactor}"
+velocity all create ${Tinfty} 4928459 dist young ${Tb0} ${Tbl} ${A} ${B} ${eta} ${MAX_RADIUS_IN} ${scalefactor}
+
+# --- Interaction Style ---
+variable cutoff equal 2.0*${d_ensem}
+variable cutoffcoul equal 2.0*${d_ensem}
+variable cutoffio equal 1.0*$d*${halfscalefactor}
+# variable cutoffio equal ${cutoffcoul}
+variable thickness equal ${MAX_RADIUS}/2
+# pair_style lj/cutio/coul/dsf 0.2 ${cutoff} ${cutoff}
+# pair_coeff * * 8 ${io1_ensem} ${io2_ensem} ${io3_ensem} ${io4_ensem} ${io5_ensem} ${io6_ensem} ${io7_ensem} ${io8_ensem} ${epsilon_ensem} ${sigma_ensem}
+set type 1 charge 0.0
+comm_modify vel yes
+
+# --- Simulation Parameters ---
+variable timestep equal 1.0
+variable Nstep equal 2e4
+variable Steps2run equal 1e7/${timestep}
+
+# --- restart strategy
+read_sldump ./dumpfiles_continue_12_09_1e8/1e8_31g_%.3100000.lammpstrj 3100000 x y z vx vy vz fx fy fz q i_tlast i2_label d_mindist nfile 2048
+#read_sldump ./dumpfiles_newdebug/debug_1e4_single.10.lammpstrj 10  x y z vx vy vz fx fy fz q i_tlast i2_label d_mindist 
+# read_sldump ./dumpfiles_newdebug/debug_1e4_16threads_%.10.lammpstrj 10  x y z vx vy vz fx fy fz q i_tlast i2_label d_mindist nfile 16
+#dump myDump all custom ${Nstep} ./dumpfiles_continue_1015/sate_1e4_%.*.lammpstrj id type x y z vx vy vz fx fy fz q i_tlast i2_label d_mindist
+dump myDump all custom ${Nstep} ./dumpfiles_continue_12_11_1e8/1e8_31g_%.*.lammpstrj id type x y z vx vy vz fx fy fz q i_tlast i2_label d_mindist
+# read_dump ./dumpfiles/debug_0.lammpstrj 0 x y z vx vy vz fx fy fz q 
+#read_sldump ./restart_dumpfiles/debug_%.1600000.lammpstrj 1600000 x y z vx vy vz fx fy fz q i_tlast i2_label d_mindist nfile 16
+#dump myDump all custom ${Nstep} ./restart_multi_dumpfiles/debug_%.*.lammpstrj id type x y z vx vy vz fx fy fz q i_tlast i2_label d_mindist
+#write_data data.*
+#restart 1000 restart
+
+dump_modify myDump format 3 "%.31f"
+dump_modify myDump format 4 "%.31f"
+dump_modify myDump format 5 "%.31f"
+dump_modify myDump format 6 "%.31f"
+dump_modify myDump format 7 "%.31f"
+dump_modify myDump format 8 "%.31f"
+dump_modify myDump format 9 "%.31f"
+dump_modify myDump format 10 "%.31f"
+dump_modify myDump format 11 "%.31f"
+
+# --- example trying to restart gtom 12e5
+#read_sldump ./dumpfiles/debug_1200000.lammpstrj 1200000 x y z vx vy vz fx fy fz q i_tlast i2_label d_mindist
+#11844.811      13034.309
+#880.69501 -0.0012663325
+# --- minimize
+#minimize 1.0e-4 1.0e-4 1000 1000
+
+# --- Time Control and Exit ---
+
+fix rebalance all balance 100000 1.0 shift xyz 10 1.1
+
+# --- Time Evolution ---
+timestep ${timestep}
+fix 1 another_all nve
+
+# --- Region & Output Variables ---
+# Need to read from the lammps output file
+
+variable tstart equal 204790-50  # picoseconds
+
+variable roughslradius equal 7152.0931122232168490882031619548798
+variable roughslradiusold equal 7152.1042924107241560705006122589111
+variable roughslvraius equal  -0.0111801926232662305477072450799
+variable roughsldelta equal 611.6032754664370258979033678770065
+variable roughsldeltaold equal 611.6036970729867334739537909626961
+variable roughslvdelta equal -0.0004216065497075760504230856895
+variable roughslTbl equal  1482.5632935671408176858676597476006
+variable roughslTblgas equal 4610.1041103158349869772791862487793
+
+variable roughth_radius equal  0.0000009769649504453500622860916
+variable roughth_vradius equal -560.6445245351427502100705169141293
+variable roughth_aradius equal 1180214036673.4611816406250000000000000000000
+variable roughth_Tb0 equal 23373.3174809359406935982406139373779
+variable roughth_delta equal  0.0000000611602853861050677654061
+
+variable sl_timestep equal 3100000.0000000000000000000000000000000
+#variable reset_time equal 0.0
+variable reset_time equal 4319817.2569140195846557617187500000000
+variable sl_time equal ${reset_time}*1e-15
+#variable reset_timestep equal ${sl_timestep}+1
+variable reset_timestep equal ${sl_timestep}
+variable reset_dt equal  1.0000000000000000000000000000000
+variable roughpB_old_init equal 1034828931.9263533353805541992187500000000  # initialize as the pB in that step (not pBold)
+
+
+# variable roughslradius equal 10244.3537143348385143326595425605774
+# variable roughslradiusold equal 10244.3647579798944207141175866127014
+# variable roughslvraius equal -0.0110436478657869110997502559712 
+# variable roughsldelta equal 785.4873053487035576836206018924713
+# variable roughsldeltaold equal 785.4879190224447711443644948303699
+# variable roughslvdelta equal  -0.0006136737412134607438929378986
+# variable roughslTbl equal  747.0826461411417085400898940861225
+# variable roughslTblgas equal 4756.5116237340325824334286153316498
+
+# variable roughth_radius equal  0.0000011923498279376455812907359
+# variable roughth_vradius equal -726.8557462005521756509551778435707
+# variable roughth_aradius equal 64607004092.9198684692382812500000000000000
+# variable roughth_Tb0 equal 15837.3441969886189326643943786621094
+# variable roughth_delta equal  0.0000000785486691675151263315865
+
+# variable sl_timestep equal 4000000
+# #variable reset_time equal 0.0
+# variable reset_time equal 4000000.0
+# variable sl_time equal ${reset_time}*1e-15
+# #variable reset_timestep equal ${sl_timestep}+1
+# variable reset_timestep equal ${sl_timestep}
+# variable reset_dt equal 1.000000000000000000000
+# variable roughpB_old_init equal 133910839.6729826927185058593750000000000  # initialize as the pB in that step (not pBold)
+
+
+# variable roughslradius equal 30869.660422985547484131530# you need to set this value manually
+# variable roughslradiusold equal 30869.663585976486501749605 # you need to set this value manually
+# variable roughslvraius equal -0.003162991216660198442
+# variable roughsldelta equal 2520.846126362433096801396
+# variable roughsldeltaold equal 2520.846412120317381777568
+# variable roughslvdelta equal -0.000285757884284976171
+# variable roughslTbl equal 315.304298971666980833106
+# variable roughslTblgas equal 315.302977031245291072992
+
+# variable roughth_radius equal 0.000003086966042298537
+# variable roughth_vradius equal -316.299112001292712648137
+# variable roughth_aradius equal -40945741770.887138366699218750000
+# variable roughth_Tb0 equal 2530.112099187588682980277
+# variable roughth_delta equal 0.000000252084584060451
+
+# variable sl_timestep equal 10.000000000000000000000
+# variable reset_time equal 10.000000000000000000000
+# variable sl_time equal ${reset_time}*1e-15
+# #variable reset_timestep equal ${sl_timestep}+1
+# variable reset_timestep equal ${sl_timestep}
+# #variable reset_timestep equal 0.0
+# variable reset_dt equal 1.000000000000000000000
+# variable roughpB_old_init equal 482915.557889888819772750139 # initialize as the pB in that step (not pBold)
+
+
+
+# variable roughslradius equal 30869.6604229855474841315299272537231# you need to set this value manually
+# variable roughslradiusold equal 30869.6635859764865017496049404144287 # you need to set this value manually
+# variable roughslvraius equal -0.0031629912166601984423175419892
+# variable roughsldelta equal 2520.8461263624330968013964593410492
+# variable roughsldeltaold equal 2520.8464121203173817775677889585495
+# variable roughslvdelta equal -0.0002857578842849761713296175003
+# variable roughslTbl equal 315.3042989716669808331062085926533
+# variable roughslTblgas equal 315.3029770312452910729916766285896
+
+# variable roughth_radius equal 0.0000030869660422985372943516062
+# variable roughth_vradius equal -316.2991120012927126481372397392988
+# variable roughth_aradius equal -40945741770.8871383666992187500000000000000
+# variable roughth_Tb0 equal 2530.1120991875886829802766442298889
+# variable roughth_delta equal 0.0000002520845840604505942335041
+
+# variable sl_timestep equal 10.000000000000000000000
+# variable reset_time equal 10.000000000000000000000
+# variable sl_time equal ${reset_time}*1e-15
+# #variable reset_timestep equal ${sl_timestep}+1
+# variable reset_timestep equal ${sl_timestep}
+# #variable reset_timestep equal 0.0
+# variable reset_dt equal 1.000000000000000000000
+# variable roughpB_old_init equal 482915.5578898888197727501392364501953 # initialize as the pB in that step (not pBold)
+
+# keep the format
+variable slradius format roughslradius %.31g
+variable slradiusold format roughslradiusold %.31g
+variable slvraius format roughslvraius %.31g 
+variable sldelta format roughsldelta %.31g
+variable sldeltaold format roughsldeltaold %.31g
+variable slvdelta format roughslvdelta %.31g
+variable slTbl format roughslTbl %.31g
+variable slTblgas format roughslTblgas %.31g
+
+variable th_radius format roughth_radius %.31g
+variable th_vradius format roughth_vradius %.31g
+variable th_aradius format roughth_aradius %.31g
+variable th_Tb0 format roughth_Tb0 %.31g
+variable th_delta format roughth_delta %.31g
+variable pB_old_init format roughpB_old_init %.31g
+
+# variable slradius format roughslradius %.21g
+# variable slradiusold format roughslradiusold %.21g
+# variable slvraius format roughslvraius %.21g 
+# variable sldelta format roughsldelta %.21g
+# variable sldeltaold format roughsldeltaold %.21g
+# variable slvdelta format roughslvdelta %.21g
+# variable slTbl format roughslTbl %.21g
+# variable slTblgas format roughslTblgas %.21g
+
+# variable th_radius format roughth_radius %.21g
+# variable th_vradius format roughth_vradius %.21g
+# variable th_aradius format roughth_aradius %.21g
+# variable th_Tb0 format roughth_Tb0 %.21g
+# variable th_delta format roughth_delta %.21g
+# variable pB_old_init format roughpB_old_init %.21g
+
+
+reset_timestep ${reset_timestep} time ${reset_time} # need to set to restart timestep+1
+timestep ${reset_dt}
+
+region km_sphere kmsphere 0.0 0.0 0.0 ${slradius} ${slradiusold} ${slvraius} 1481 1000 101325 0.072 0.001 ${cutoff} 26.5e3 1.3 ${tstart} ${scalefactor} ${Tinfty} ${alpha1} ${slvdelta} ${sldelta} ${sldeltaold} ${th_radius} ${th_vradius} ${th_aradius} ${th_Tb0} ${th_delta} ${sl_time} ${pB_old_init} side in
+#region km_sphere kmsphere 0.0 0.0 0.0 ${MAX_RADIUS} ${MAX_RADIUS} ${velocitystart} 1481 1000 101325 0.072 0.001 ${cutoff} 26.5e3 1.3 ${tstart} ${scalefactor} ${Tinfty} ${alpha1} ${vdelta} ${delta} ${delta} ${th_radius} ${th_vradius} ${th_aradius} ${th_Tb0} ${th_delta} 0.0 0.0 side in
+# --- Output and Derived Observables ---
+compute peratom all stress/atom NULL
+variable SLradius equal slradius(all,km_sphere)
+variable SLradiusold equal slradiusold(all,km_sphere)
+variable innerradius equal v_SLradius-${cutoff}
+region outterbubble sphere 0.0 0.0 0.0 v_SLradius side in
+region innerbubble sphere 0.0 0.0 0.0 v_innerradius side out
+region shell intersect 2 outterbubble innerbubble
+variable RCORE equal v_SLradius/10.0
+region core sphere 0.0 0.0 0.0 v_RCORE side in
+
+variable SLvradius equal slvradius(all,km_sphere)
+variable SLcount equal slcount(all,km_sphere)
+variable SLpB equal slpB(all,km_sphere)
+variable SLpBold equal slpBold(all,km_sphere)
+variable SLpb equal slpb(all,km_sphere)
+variable SLTblgas equal slgastemp(all,km_sphere)/${scalefactor}
+variable SLTwall equal slwalltemp(all,km_sphere)/${scalefactor}
+variable SLdelta equal sldelta(all,km_sphere)
+variable SLdeltaold equal sldeltaold(all,km_sphere)
+variable SLnumatoms equal slnumatoms(all,km_sphere)
+variable SLvdelta equal slvdelta(all,km_sphere)
+variable SLdebug equal sldebug(all,km_sphere)
+variable SLsteps equal slsteps(all,km_sphere)
+
+variable THradius equal thradius(all,km_sphere)
+variable THvradius equal thvradius(all,km_sphere)
+variable THaradius equal tharadius(all,km_sphere)
+variable THTb0 equal thTb0(all,km_sphere)
+variable THdelta equal thdelta(all,km_sphere)
+
+# compute coretemp all temp/region core
+variable shellcount equal count(all,shell)
+compute pcore all reduce/slregion core sum c_peratom[1] c_peratom[2] c_peratom[3]
+compute pshell all reduce/slregion shell sum c_peratom[1] c_peratom[2] c_peratom[3]
+compute pbubble all reduce/slregion km_sphere sum c_peratom[1] c_peratom[2] c_peratom[3]
+compute coretemp all temp/region core
+variable corecount equal count(all,core)
+
+variable presscore equal -(c_pcore[1]+c_pcore[2]+c_pcore[3])/(4.0*${pi}*v_RCORE^3)
+variable pressshell equal -(c_pshell[1]+c_pshell[2]+c_pshell[3])/(4.0*${pi}*v_SLradius^3-4.0*${pi}*v_innerradius^3)
+variable pressbubble equal -(c_pbubble[1]+c_pbubble[2]+c_pbubble[3])/(4.0*${pi}*v_SLradius^3)
+
+# -- Per-Atom Properties for per-atom 
+variable slvelocity atom sqrt(vx^2+vy^2+vz^2)
+variable slcharge atom q
+variable slvirial atom c_peratom[1]+c_peratom[2]+c_peratom[3]
+
+# attribute distribution
+compute comdis all chunk/atom bin/sphere 0.0 0.0 0.0 0.0 ${MAX_RADIUS} 1000 discard yes
+fix fixcomdis all ave/chunk 1000 1 1000 comdis temp v_slcharge v_slvelocity v_slvirial density/mass density/number file 1e8_comdis_12_11_restart.out
+
+thermo 1000
+thermo_style custom step dt time cpu vcpu tpcpu spcpu cpuuse temp etotal press v_pressbubble v_pressshell c_coretemp v_corecount v_presscore v_shellcount v_SLradius v_SLradiusold v_SLdebug v_SLvradius v_SLcount  v_SLpB v_SLpBold v_SLpb v_SLTblgas v_SLTwall v_SLdelta v_SLdeltaold v_SLnumatoms  v_SLvdelta v_SLsteps v_THradius v_THvradius v_THaradius v_THTb0 v_THdelta
+thermo_modify format float "%.31f"
+# thermo_modify format v_SLdelta %14.15g
+# thermo_modify format v_SLradius %.19g
+# thermo_modify format v_SLpB %.19g
+# --- Wall and Region Forces ---
+fix wall all wall/mdhb km_sphere lj126 ${epsilon_water_ensem} ${sigma_water_ensem} ${cutoff} 1.0 ${scalefactor} 1000.0 4180.0 300.0 ${slTblgas} ${slTbl} 
+# fix wall all wall/mdhb km_sphere lj126 0.0 ${sigma_water_ensem} ${cutoff} 1.0 ${scalefactor} 1000.0 4180.0 300.0 ${slTblgas} ${slTbl}
+fix_modify wall virial yes
+
+
+
+variable tmin equal 1.0
+variable tmax equal 8.0
+variable estimate_max_temp equal 80000
+variable estimate_max_velocity equal sqrt(${estimate_max_temp}*3.0*${kB}*${NA}*1e-7/${m})
+variable estimate_Xmax equal ${estimate_max_velocity}*${tmin}
+
+fix adaptive_step all dt/reset 1000 ${tmin} ${tmax} ${estimate_Xmax}
+fix whenhalt all halt 1000 v_SLsteps > 1e7
+#fix whenhalt all halt 1000 v_SLsteps > 2000
+#run ${Steps2run}
+# pair_style lj/cut/coul/dsfnovel 0.2 ${cutoff} ${cutoff}
+# pair_coeff * * ${epsilon_ensem} ${sigma_ensem}
+# run 1 
+
+variable active equal step>${sl_timestep}
+
+
+variable alpha equal 3.0/${cutoffcoul}
+pair_style lj/cutio/coul/dsf ${alpha} ${cutoff} ${cutoffcoul} ${cutoffio}
+pair_coeff * * 8 ${io1_ensem} ${io2_ensem} ${io3_ensem} ${io4_ensem} ${io5_ensem} ${io6_ensem} ${io7_ensem} ${io8_ensem} ${epsilon_ensem} ${sigma_ensem} v_active ${scalefactor}
+
+# pair_style lj/cut ${cutoff}
+# pair_coeff * * ${epsilon_ensem} ${sigma_ensem}
+
+# pair_style lj/cut ${cutoff}
+# pair_coeff * * ${epsilon_ensem} ${sigma_ensem}
+# neigh_modify  check no
+
+neigh_modify one 10000 page 2000000
+
+run_style restartverlet
+# run 100
+run ${Steps2run}
+# run 1000
+# run 200000
