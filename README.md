@@ -281,8 +281,7 @@ test_1e4/
   run_1e4_restart.sh                  SLURM restart script
 
 tools/TBSL/
-  generate_particles_lattice.py  Radial-PDF lattice initializer (recommended)
-  generate_particles*.py         Alternative initializers (FCC, satellite, chunked)
+  generate_particles_lattice.py  Radial-PDF lattice initializer
   run_intialize.sh               SLURM submission script for initialization
   requirements.txt               Python dependencies (numpy, tqdm)
 
