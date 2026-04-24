@@ -139,6 +139,72 @@ Tested on: GCC 11, OpenMPI 4.1, LAMMPS Aug 2023 base.
 
 ---
 
+## Particle Initialization
+
+Before running a simulation you need a LAMMPS data file with N atoms placed inside the bubble.
+The script `tools/TBSL/generate_particles_lattice.py` generates this file by sampling positions
+from a **radial probability distribution** that matches the theoretical density profile of the
+gas inside the bubble at the start of the simulation:
+
+$$p(r) \propto x_a \left(\frac{r}{R_b}\right)^4 + x_b \left(\frac{r}{R_b}\right)^2, \qquad x_a = -1.578,\; x_b = 3.947$$
+
+Atoms are placed on a cubic lattice with spacing `h = 2 × d_ensem` (the hard-core diameter),
+then N sites are drawn using the radial PDF weights.  A two-pass parallel threshold algorithm
+handles large N efficiently on HPC clusters.
+
+**Install dependencies** (once, into a conda environment named `TBSL`):
+
+```bash
+conda create -n TBSL python=3.10
+conda activate TBSL
+pip install -r tools/TBSL/requirements.txt
+```
+
+**Generate for any N:**
+
+```bash
+cd tools/TBSL
+
+# 1e4 particles — fast, a few seconds on one node
+python generate_particles_lattice.py \
+  --N 10000 \
+  --parallel --cpus 16 \
+  --block 8 --tile 64 \
+  --pilot_factor 2.0 --tau_slack 1.02 \
+  --avoid_boundary \
+  --output initialize_lattice_1e4.lammpsdata
+
+# 1e6 particles — ~5 min on 128 cores
+python generate_particles_lattice.py \
+  --N 1000000 \
+  --parallel --cpus 128 \
+  --block 8 --tile 64 \
+  --pilot_factor 2.0 --tau_slack 1.02 \
+  --avoid_boundary \
+  --output initialize_lattice_1e6.lammpsdata
+```
+
+On a SLURM cluster, use the provided script (adjust `--ntasks` to available cores):
+
+```bash
+sbatch tools/TBSL/run_intialize.sh
+```
+
+The `read_data` line in every `in.*` input file points to the corresponding `.lammpsdata` file,
+so update that path after generating.
+
+**Key arguments:**
+
+| Argument | Default | Description |
+|---|---|---|
+| `--N` | 10000 | Number of ensemble particles |
+| `--Rb` | 3.087×10⁴ Å | Initial bubble radius |
+| `--avoid_boundary` | off | Exclude atoms within `d_ensem` of the wall |
+| `--parallel --cpus K` | off | Use K parallel workers (recommended for N ≥ 10⁶) |
+| `--output` | `initialize_lattice_radial_1e4.lammpsdata` | Output filename |
+
+---
+
 ## Quick Start
 
 A complete 1×10⁴-particle SBSL run (α_t = 1, short-range ionization, ~22 min on 16 cores):
@@ -213,6 +279,12 @@ test_1e4/
   in.restart_1e4_alpha_1_shortio      Restart input (step 1 000 000)
   run_1e4_alpha1_shortio.sh           SLURM submission script
   run_1e4_restart.sh                  SLURM restart script
+
+tools/TBSL/
+  generate_particles_lattice.py  Radial-PDF lattice initializer (recommended)
+  generate_particles*.py         Alternative initializers (FCC, satellite, chunked)
+  run_intialize.sh               SLURM submission script for initialization
+  requirements.txt               Python dependencies (numpy, tqdm)
 
 scaffold/
   read_restart.py     Extract restart state from a thermo log
