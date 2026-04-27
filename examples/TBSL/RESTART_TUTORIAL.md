@@ -167,3 +167,32 @@ The ionization fix (`pair_lj/cutio`) must not fire at the restart step itself, b
 the ion labels (`i2_label`) are already set in the dump.  Setting `active=0` at exactly
 `step == sl_timestep` suppresses ionization for one step; from `sl_timestep+1` onward
 `active=1` and ionization resumes normally.
+
+---
+
+## GPU restart
+
+The procedure is identical to the CPU case.  Only three things differ:
+
+1. **Use `lmp_gpu`** (the GPU-enabled binary).
+
+2. **`nfile` must match the original GPU run** — a single-rank GPU run writes one dump file, so use `nfile 1`.
+
+3. **Add `package gpu N neigh no`** at the top of the input (before `pair_style`).
+
+```lammps
+package gpu 1 neigh no
+...
+read_sldump .../dumpfiles/1e4_%.1000000.lammpstrj 1000000 \
+    x y z vx vy vz fx fy fz q i_tlast i2_label d_mindist nfile 1
+...
+pair_style lj/cutio/coul/dsf/gpu <alpha> <cutoff_lj> <cutoff_coul> <cutoff_io>
+run_style restartverlet
+```
+
+**Phase 1 tolerance for GPU:** Forces are computed in float32, so the restart is not bit-for-bit identical to the original run.  Relative differences of ~10⁻⁷ in KM ODE state variables (growing linearly with step count) are expected.  Pass `--gpu` to use the relaxed float32 threshold (1e-5 instead of 1e-10):
+
+```bash
+python ../../scaffold/compare_restart.py \
+    full_gpu.log restart_gpu.log 1000000 933766.35 --gpu
+```

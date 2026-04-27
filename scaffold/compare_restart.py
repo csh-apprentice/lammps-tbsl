@@ -3,15 +3,18 @@
 compare_restart.py  —  Verify that a restarted run matches the original.
 
 Usage:
-    python compare_restart.py <original_log> <restart_log> <restart_step>
+    python compare_restart.py <original_log> <restart_log> <restart_step> [scalefactor] [--gpu]
 
 Two-phase validation:
   PHASE 1 — Near-term (first ~10 000 steps after restart):
-    Because LAMMPS MD is deterministic given identical forces and KM ODE state,
-    the restarted run should reproduce the original bit-for-bit for the first
-    several thousand steps.  Relative differences below ~1e-14 are expected
-    (last-bit floating-point rounding); anything above 1e-10 suggests the
-    restart state was not loaded correctly.
+    CPU (double precision): the restarted run should reproduce the original
+    bit-for-bit.  Relative differences below ~1e-14 are expected; anything
+    above 1e-10 suggests the restart state was not loaded correctly.
+
+    GPU (float32 forces): force calculations use float32, so bit-for-bit
+    agreement is not possible.  Pass --gpu to use a relaxed threshold of
+    1e-5.  Differences of ~1e-7 growing linearly are normal; values above
+    1e-5 indicate a restart state problem.
 
   PHASE 2 — Long-term (full overlap):
     MD is a chaotic system — tiny rounding differences grow exponentially over
@@ -25,27 +28,45 @@ Arguments:
     original_log   SLURM .lammps output from the uninterrupted run.
     restart_log    SLURM .lammps output from the restart run.
     restart_step   LAMMPS timestep at which the restart began.
+    scalefactor    Optional: divide Temp by this for physical K (e.g. 933766.35).
+    --gpu          Use relaxed float32 tolerance (1e-5) for Phase 1.
 
-Example:
+Example (CPU):
     python compare_restart.py \\
         test_1e4/run_1e4_alpha1_shortio.lammps \\
         test_1e4/run_1e4_restart.lammps \\
         1000000
+
+Example (GPU):
+    python compare_restart.py \\
+        test_local/full_gpu.log \\
+        test_local/restart_gpu_full.log \\
+        1000000 933766.35 --gpu
 """
 
 import sys
 import os
 
-# Columns for near-term bit-for-bit check
-NEARTERM_COLS = [
+# KM ODE state columns — govern restart correctness; must match closely.
+# CPU: threshold 1e-10 (double precision). GPU: threshold 1e-5 (float32 accumulation).
+NEARTERM_ODE_COLS = [
     "v_SLradius",
     "v_SLvradius",
     "v_SLdelta",
-    "v_SLpB",
     "v_THradius",
     "v_THaradius",
+]
+
+# Instantaneous ensemble observables — NOT used for pass/fail in GPU mode.
+# GPU force accumulation is non-deterministic (CUDA atomic ops + float32), so
+# these differ by ~1e-4 even between two fresh GPU runs from identical initial
+# conditions.  They are shown for information only.
+NEARTERM_INSTANT_COLS = [
+    "v_SLpB",
     "Temp",
 ]
+
+NEARTERM_COLS = NEARTERM_ODE_COLS + NEARTERM_INSTANT_COLS
 
 # Scalar quantities for long-term physical validation
 # Each entry: (column, aggregation)  where aggregation is 'min' or 'max'
@@ -93,7 +114,7 @@ def rel_diff(a, b):
     return abs(a - b) / denom
 
 
-def phase1_nearterm(orig_map, restart_map, restart_step):
+def phase1_nearterm(orig_map, restart_map, restart_step, gpu_mode=False):
     limit = restart_step + NEARTERM_STEPS
     # Skip the exact restart step: at step 0 of the restart, v_SLpB reports
     # the injected pB_old_init rather than the freshly-computed pressure,
@@ -103,6 +124,10 @@ def phase1_nearterm(orig_map, restart_map, restart_step):
     if not near_steps:
         print("  (no common steps found in the near-term window)")
         return
+
+    # GPU uses float32 forces; bit-for-bit agreement is impossible.
+    # Differences of ~1e-7 growing linearly are expected and correct.
+    threshold = 1e-5 if gpu_mode else 1e-10
 
     col_w = 14
     header = f"{'Step':>12}  " + "  ".join(f"{c:>{col_w}}" for c in NEARTERM_COLS)
@@ -123,20 +148,34 @@ def phase1_nearterm(orig_map, restart_map, restart_step):
         print(f"{step:>12}  " + "  ".join(diffs))
 
     print()
-    worst = max(max_diffs.values())
+    # Pass/fail is based on KM ODE state columns only; instantaneous observables
+    # are non-deterministic on GPU due to float32 atomic accumulation.
+    ode_worst = max((max_diffs.get(c, 0.0) for c in NEARTERM_ODE_COLS), default=0.0)
     print(f"  Max rel-diff over first {NEARTERM_STEPS} steps:")
     for c in NEARTERM_COLS:
-        flag = "  <-- PROBLEM" if max_diffs[c] > 1e-10 else ""
-        print(f"    {c:<22} {max_diffs[c]:.3e}{flag}")
+        if gpu_mode and c in NEARTERM_INSTANT_COLS:
+            note = "  (GPU non-deterministic, not used for pass/fail)"
+        else:
+            note = f"  <-- PROBLEM (>{threshold:.0e})" if max_diffs[c] > threshold else ""
+        print(f"    {c:<22} {max_diffs[c]:.3e}{note}")
     print()
-    if worst < 1e-14:
-        print("  PHASE 1: BIT-FOR-BIT IDENTICAL  (restart is exact)")
-    elif worst < 1e-10:
-        print("  PHASE 1: PASS  (differences at last-bit floating-point level)")
+    if gpu_mode:
+        if ode_worst < threshold:
+            print("  PHASE 1: PASS (GPU float32 — KM ODE state differences consistent with float32 arithmetic)")
+        else:
+            print(f"  PHASE 1: FAIL  — KM ODE state differences above {threshold:.0e} (GPU float32 threshold).")
+            print("           Check that rough* values were pasted correctly and that")
+            print("           run_style restartverlet is used.")
     else:
-        print("  PHASE 1: FAIL  — differences above 1e-10 in the first 10 000 steps.")
-        print("           Check that rough* values were pasted correctly and that")
-        print("           run_style restartverlet is used.")
+        worst = max(max_diffs.values())
+        if worst < 1e-14:
+            print("  PHASE 1: BIT-FOR-BIT IDENTICAL  (restart is exact)")
+        elif worst < threshold:
+            print("  PHASE 1: PASS  (differences at last-bit floating-point level)")
+        else:
+            print(f"  PHASE 1: FAIL  — differences above {threshold:.0e} in the first 10 000 steps.")
+            print("           Check that rough* values were pasted correctly and that")
+            print("           run_style restartverlet is used.")
 
 
 def phase2_longterm(orig_rows, restart_rows, restart_step, scalefactor=None):
@@ -178,11 +217,15 @@ def main():
         print(__doc__)
         sys.exit(1)
 
-    orig_file    = sys.argv[1]
-    restart_file = sys.argv[2]
-    restart_step = int(sys.argv[3])
+    args = sys.argv[1:]
+    gpu_mode = "--gpu" in args
+    args = [a for a in args if a != "--gpu"]
+
+    orig_file    = args[0]
+    restart_file = args[1]
+    restart_step = int(args[2])
     # Optional: scalefactor for Temp conversion (e.g. 933766.35 for N=1e4)
-    scalefactor = float(sys.argv[4]) if len(sys.argv) > 4 else None
+    scalefactor = float(args[3]) if len(args) > 3 else None
 
     for f in (orig_file, restart_file):
         if not os.path.isfile(f):
@@ -209,10 +252,13 @@ def main():
     print(f"Overlap:   {len(common_steps)} common steps, "
           f"{common_steps[0]} – {common_steps[-1]}")
 
+    if gpu_mode:
+        print("  [GPU mode: using relaxed float32 tolerance for Phase 1]")
+
     print(f"\n{'='*70}")
-    print(f"PHASE 1 — Near-term bit-for-bit check (first {NEARTERM_STEPS} steps)")
+    print(f"PHASE 1 — Near-term {'float32' if gpu_mode else 'bit-for-bit'} check (first {NEARTERM_STEPS} steps)")
     print(f"{'='*70}")
-    phase1_nearterm(orig_map, restart_map, restart_step)
+    phase1_nearterm(orig_map, restart_map, restart_step, gpu_mode=gpu_mode)
 
     print(f"{'='*70}")
     print(f"PHASE 2 — Long-term physical observables (all overlapping steps)")

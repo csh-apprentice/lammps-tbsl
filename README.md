@@ -70,6 +70,8 @@ pair_coeff * * 8 <I1> <I2> <I3> <I4> <I5> <I6> <I7> <I8> \
 
 `v_active` is an equal-style variable; set it to `step > restart_step` to suppress ionization at a restart's first step (see [Restart Tutorial](examples/TBSL/RESTART_TUTORIAL.md)).
 
+A GPU-accelerated variant `pair lj/cutio/coul/dsf/gpu` is available; see [GPU Acceleration](#gpu-acceleration).
+
 ---
 
 ### 4. Restart Integrator — `run_style restartverlet`
@@ -123,6 +125,8 @@ where $\text{sf} = N_\text{real} / N_\text{ensem}$.
 
 ## Building
 
+### CPU (MPI)
+
 This repo follows standard LAMMPS CMake build conventions.  The custom files live entirely in `src/`; no changes to `CMakeLists.txt` are needed.
 
 ```bash
@@ -136,6 +140,23 @@ make -j$(nproc)
 ```
 
 Tested on: GCC 11, OpenMPI 4.1, LAMMPS Aug 2023 base.
+
+### GPU (CUDA)
+
+```bash
+mkdir build-gpu && cd build-gpu
+cmake ../cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_MPI=yes \
+      -DPKG_KSPACE=yes -DPKG_EXTRA-PAIR=yes \
+      -DPKG_GPU=yes -DGPU_API=cuda -DGPU_ARCH=sm_86
+make -j$(nproc)
+# binary: build-gpu/lmp_gpu
+```
+
+Adjust `-DGPU_ARCH` to match your GPU (sm_80 for A100, sm_89 for RTX 4090, etc.).
+
+**CUDA 12.4 + glibc 2.39 note** — if the build fails with `error: incomplete type is not allowed` on `sinpi`/`cospi`, this is handled automatically by `-Xcompiler -U_GNU_SOURCE` in the build system; no manual source edits are needed.
+
+Tested on: NVIDIA RTX A6000, CUDA 12.4, GCC 11.
 
 ---
 
@@ -233,6 +254,41 @@ Expected results (α_t = 1, N = 10⁴, Ar bubble, R₀ = 4.5 µm):
 
 ---
 
+## GPU Acceleration
+
+### Usage
+
+Replace `pair lj/cutio/coul/dsf` with `pair lj/cutio/coul/dsf/gpu` and add `package gpu N neigh no` before it:
+
+```lammps
+package gpu 1 neigh no
+pair_style lj/cutio/coul/dsf/gpu <alpha> <cutoff_lj> <cutoff_coul> <cutoff_io>
+```
+
+`neigh no` is mandatory: the ionization pipeline walks CPU-built neighbor lists, so GPU neighbor construction is not supported.
+
+For multiple GPUs, set N in `package gpu N neigh no` to the number of physical GPUs, then launch with as many MPI ranks as CPU cores allow — not just one per GPU.  With `neigh no`, each MPI rank builds its own portion of the neighbor list on CPU; more ranks parallelise that work.  LAMMPS assigns GPUs to ranks round-robin:
+
+```lammps
+package gpu 2 neigh no          # 2 physical GPUs
+```
+
+```bash
+mpirun -np 32 lmp_gpu -in in.simulation.lammps  # 32 ranks share 2 GPUs
+```
+
+Example inputs are in `test_1e4/in.simulation_1e4_alpha_1_shortio_gpu` and `test_1e4/in.restart_1e4_alpha_1_shortio_gpu`.  The restart procedure is identical to CPU — see [RESTART_TUTORIAL.md](examples/TBSL/RESTART_TUTORIAL.md).
+
+### What differs from the CPU pair style
+
+The GPU variant (`pair_lj_cutio_coul_dsf_gpu`) inherits from the CPU class.  Only the force loop is offloaded: LJ and DSF Coulomb forces are computed on the GPU via the LAMMPS Accelerator Library (LAL) kernel in `lib/gpu/lal_lj_cutio_dsf.cu`.  The three ionization phases — which require sequential per-atom state updates and MPI communication between phases — remain on CPU, unchanged.  `fix_gpu.cpp` was patched to recognise `run_style restartverlet` alongside the standard `verlet` integrator.
+
+### Performance note
+
+The GPU version is slower than CPU MPI for typical SBSL conditions.  The simulation spends most of its time in the dilute expansion phase, where ensemble scaling keeps the pair density constant (~0.04 neighbor pairs per atom) regardless of N.  At this occupancy, GPU force kernels are underutilised and the PCIe transfer overhead dominates.  Benchmarks on an RTX A6000 show the GPU is 1.7–14× slower than 32-rank CPU MPI depending on rank count.  GPU support is provided for environments where CPU parallelism is limited; CPU MPI is recommended for production runs.
+
+---
+
 ## Restarting a Run
 
 Long jobs are interrupted.  See [examples/TBSL/RESTART_TUTORIAL.md](examples/TBSL/RESTART_TUTORIAL.md) for the full step-by-step guide.  The short version:
@@ -259,26 +315,34 @@ python scaffold/compare_restart.py \
 
 ```
 src/
-  region_kmsphere.cpp/h       Keller-Miksis sphere boundary
-  fix_wall_mdhb.cpp/h         MD heat bath wall
-  pair_lj_cutio_coul_dsf.cpp/h  LJ + ionization + Coulomb DSF
-  restartverlet.cpp/h         Restart-safe Verlet integrator
-  read_sldump.cpp/h           Parallel dump loader for restart
-  compute_reduce_slregion.cpp/h  Per-region reduction compute
-  variable.cpp                sl*() / th*() observable functions
-  velocity.cpp                dist young initial conditions
+  region_kmsphere.cpp/h         Keller-Miksis sphere boundary
+  fix_wall_mdhb.cpp/h           MD heat bath wall
+  pair_lj_cutio_coul_dsf.cpp/h  LJ + ionization + Coulomb DSF (CPU)
+  GPU/
+    lal_lj_cutio_dsf.cpp/h      GPU kernel wrapper for ionization pair style
+    pair_lj_cutio_coul_dsf_gpu.cpp/h  GPU pair style (lj/cutio/coul/dsf/gpu)
+    fix_gpu.cpp                 GPU package fix (patched for restartverlet)
+  restartverlet.cpp/h           Restart-safe Verlet integrator
+  read_sldump.cpp/h             Parallel dump loader for restart
+  compute_reduce_slregion.cpp/h Per-region reduction compute
+  variable.cpp                  sl*() / th*() observable functions
+  velocity.cpp                  dist young initial conditions
   ... (standard LAMMPS source)
 
 examples/TBSL/
-  in.simulation_1e6_alpha_*   Production input scripts (1e6 particles)
-  RESTART_TUTORIAL.md         Step-by-step restart guide
-  history/                    All historical input scripts
+  in.simulation_1e6_alpha_*     Production input scripts (1e6 particles)
+  RESTART_TUTORIAL.md           Step-by-step restart guide
+  history/                      All historical input scripts
 
 test_1e4/
-  in.simulation_1e4_alpha_1_shortio   Validated 1e4 benchmark input
-  in.restart_1e4_alpha_1_shortio      Restart input (step 1 000 000)
-  run_1e4_alpha1_shortio.sh           SLURM submission script
-  run_1e4_restart.sh                  SLURM restart script
+  in.simulation_1e4_alpha_1_shortio      Validated 1e4 benchmark input (CPU)
+  in.simulation_1e4_alpha_1_shortio_gpu  Same benchmark, GPU variant
+  in.restart_1e4_alpha_1_shortio         Restart input (CPU, step 1 000 000)
+  in.restart_1e4_alpha_1_shortio_gpu     Restart input (GPU, step 1 000 000)
+  run_1e4_alpha1_shortio.sh              SLURM CPU submission script
+  run_1e4_alpha1_shortio_gpu.sh          SLURM GPU submission script
+  run_1e4_restart.sh                     SLURM CPU restart script
+  run_1e4_restart_gpu.sh                 SLURM GPU restart script
 
 tools/TBSL/
   generate_particles_lattice.py  Radial-PDF lattice initializer
@@ -287,7 +351,7 @@ tools/TBSL/
 
 scaffold/
   read_restart.py     Extract restart state from a thermo log
-  compare_restart.py  Validate restart against original run
+  compare_restart.py  Validate restart against original run (supports --gpu flag)
 ```
 
 ---
