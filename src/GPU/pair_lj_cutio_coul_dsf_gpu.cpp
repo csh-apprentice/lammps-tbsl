@@ -112,38 +112,7 @@ void PairLJCutIOCoulDSFGPU::compute(int eflag, int vflag)
   // Phase 1-3: ionization pipeline (runs on CPU, uses CPU neighbor list)
   // These modify q, v, label, mindist and require MPI comms between phases.
   // -----------------------------------------------------------------------
-  double **v = atom->v;
-  double *q = atom->q;
-  int *label = atom->ivector[1];
-  double *mindist = atom->dvector[0];
-  int newton_pair = force->newton_pair;
-
-  ionization(v, q, label, mindist);
-
-  pack_flag = 1;
-  comm->forward_comm(this);
-  if (newton_pair) {
-    pack_flag = 1;
-    comm->reverse_comm(this);
-  }
-
-  reset(label, mindist);
-
-  pack_flag = 2;
-  comm->forward_comm(this);
-  if (newton_pair) {
-    pack_flag = 2;
-    comm->reverse_comm(this);
-  }
-
-  labelnext(v, q, label, mindist);
-
-  pack_flag = 3;
-  comm->forward_comm(this);
-  if (newton_pair) {
-    pack_flag = 3;
-    comm->reverse_comm(this);
-  }
+  ionization_pipeline();
   timer->stamp(Timer::IONIZATION);
 
   // -----------------------------------------------------------------------
@@ -183,8 +152,7 @@ void PairLJCutIOCoulDSFGPU::compute(int eflag, int vflag)
 
 void PairLJCutIOCoulDSFGPU::init_style()
 {
-  if (!atom->q_flag)
-    error->all(FLERR, "Pair style lj/cutio/coul/dsf/gpu requires atom attribute q");
+  init_ionization();
 
   // Only GPU_FORCE is supported because ionization uses the CPU neighbor list
   gpu_mode = GPU_FORCE;
@@ -210,11 +178,6 @@ void PairLJCutIOCoulDSFGPU::init_style()
   double erfcd = exp(-alpha * alpha * cut_coul * cut_coul);
   f_shift = -(erfcc / cut_coulsq + 2.0 / MY_PIS * alpha * erfcd / cut_coul);
   e_shift = erfcc / cut_coul - f_shift * cut_coul;
-
-  // MPI comm sizes (same as CPU parent)
-  comm_forward = 3;
-  comm_reverse = 3;
-  comm_reverse_off = 3;
 
   int maxspecial = 0;
   if (atom->molecular != Atom::ATOMIC) maxspecial = atom->maxspecial;

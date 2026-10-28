@@ -53,6 +53,12 @@ class PairLJCutIOCoulDSF : public Pair {
   void variable_check();
 
  protected:
+  enum { ION_STATE = 1, ION_CANDIDATES = 2 };
+  void init_ionization();
+  void ionization_pipeline();
+  double next_ionization_energy(int, int, int);
+  int label_index = -1;
+  int mindist_index = -1;
   int pack_flag;
   double cut_lj_global;
   double **cut_lj, **cut_ljsq;
@@ -68,7 +74,7 @@ class PairLJCutIOCoulDSF : public Pair {
   double ***iopo; //ionization potential
 
   int activevar;
-  char *activestr;
+  char *activestr = nullptr;
 
   double scalefactor;
   double spair=1.0;

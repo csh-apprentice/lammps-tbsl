@@ -21,6 +21,7 @@
 
 #include "atom.h"
 #include "comm.h"
+#include "domain.h"
 #include "error.h"
 #include "force.h"
 #include "math_const.h"
@@ -33,6 +34,7 @@
 #include "variable.h"
 #include <cmath>
 #include <cstring>
+#include <limits>
 
 using namespace LAMMPS_NS;
 using namespace MathConst;
@@ -45,10 +47,30 @@ using namespace MathConst;
 #define A4       -1.453152027
 #define A5        1.061405429
 
-#define EPSILON 1e-12
-#define MAXENERGY 1e12
 #define BIG 1e20
 
+namespace {
+// With units real, masses are g/mol and velocities are Angstrom/fs. The
+// ionization thresholds supplied by TBSL inputs are kJ/mol (not kcal/mol).
+double collision_energy(double mi, double mj, const double *vi, const double *vj)
+{
+  double relative_speed_sq = 0.0;
+  for (int d = 0; d < 3; ++d) {
+    const double du = vi[d] - vj[d];
+    relative_speed_sq += du * du;
+  }
+  const double reduced_mass = mi * mj / (mi + mj);
+  return 0.5e4 * reduced_mass * relative_speed_sq;
+}
+
+// Exact distance/tag ordering makes the MPI minimum reduction independent of
+// visitation order, including exact distance ties.
+bool nearer(double distance, int tag, double best_distance, int best_tag)
+{
+  return distance < best_distance ||
+    (distance == best_distance && (best_tag < 0 || tag < best_tag));
+}
+}
 
 
 /* ---------------------------------------------------------------------- */
@@ -66,6 +88,8 @@ PairLJCutIOCoulDSF::PairLJCutIOCoulDSF(LAMMPS *lmp) : Pair(lmp)
 PairLJCutIOCoulDSF::~PairLJCutIOCoulDSF()
 {
   if (copymode) return;
+
+  delete[] activestr;
 
   if (allocated) {
     memory->destroy(setflag);
@@ -104,10 +128,6 @@ void PairLJCutIOCoulDSF::compute(int eflag, int vflag)
   double **x = atom->x;
   double **f = atom->f;
   double *q = atom->q;
-  double **v=atom->v;
-  double *m=atom->rmass;
-  int *label=atom->ivector[1];
-  double *mindist =atom->dvector[0];
   int *type = atom->type;
   int nlocal = atom->nlocal;
   double *special_lj = force->special_lj;
@@ -121,44 +141,7 @@ void PairLJCutIOCoulDSF::compute(int eflag, int vflag)
   numneigh = list->numneigh;
   firstneigh = list->firstneigh;
   
-  //utils::logmesg(lmp,"PAIR LJ CUT IO COUL DSFVIRIAL, eflag_either {}, eflag_atom {}, vflag_either {}, vflag_global {}, vflag_atom {}, newton_pair {}  \n",eflag_either,eflag_atom,vflag_either,vflag_global,vflag_atom,newton_pair) ;
-  //extension for ionization
-  // pack_flag = 4;
-  // comm->forward_comm(this);
-  // loop over neighbors of my atoms
-  //if(update->ntimestep==168)
-  //before started, print out all atom information
-  
-  ionization(v,q,label,mindist);   // change the q
-  
-  pack_flag = 1;
-  comm->forward_comm(this);
-  if(newton_pair)
-  {
-    pack_flag=1;
-    comm->reverse_comm(this);
-  }
-
-
-  reset(label,mindist);   // change the label and mindist
-
-  pack_flag = 2;
-  comm->forward_comm(this);
-  if(newton_pair)
-  {
-    pack_flag=2;
-    comm->reverse_comm(this);
-  }
-
-  labelnext(v,q,label,mindist);  // change the label and mindist
-
-  pack_flag = 3;
-  comm->forward_comm(this);
-  if(newton_pair)
-  {
-    pack_flag=3;
-    comm->reverse_comm(this);
-  }
+  ionization_pipeline();
   timer->stamp(Timer::IONIZATION);
   for (ii = 0; ii < inum; ii++) {
       i = ilist[ii];
@@ -316,15 +299,21 @@ void PairLJCutIOCoulDSF::coeff(int narg, char **arg)
   utils::bounds(FLERR,arg[1],1,atom->ntypes,jlo,jhi,error);
 
   //right format should be pair_coeff type1 type2 num_io io1, io2, ..., io_{num} epsilon sigma (cutoff)
-  num_io=utils::numeric(FLERR, arg[2], false, lmp);
+  num_io=utils::inumeric(FLERR, arg[2], false, lmp);
+  if (num_io < 1 || num_io > 8 || (narg != num_io+7 && narg != num_io+8))
+    error->all(FLERR,"Incorrect ionization ladder or args for pair coefficients");
 
   //extension for ionization
   double iopo_eight[8];
-  for(int i=0;i<num_io;i++)
+  for(int i=0;i<num_io;i++) {
     iopo_eight[i]=utils::numeric(FLERR, arg[3+i], false, lmp);
+    if (!std::isfinite(iopo_eight[i]) || iopo_eight[i] <= 0.0)
+      error->all(FLERR,"Ionization thresholds must be positive and finite (kJ/mol)");
+  }
 
   double epsilon_one = utils::numeric(FLERR,arg[3+num_io],false,lmp);
   double sigma_one = utils::numeric(FLERR,arg[4+num_io],false,lmp);
+  delete[] activestr;
   activestr=utils::strdup(arg[5+num_io]+2);
   double cut_lj_one = cut_lj_global;
   scalefactor= utils::numeric(FLERR,arg[6+num_io],false,lmp);
@@ -360,8 +349,7 @@ void PairLJCutIOCoulDSF::coeff(int narg, char **arg)
 
 void PairLJCutIOCoulDSF::init_style()
 {
-  if (!atom->q_flag)
-    error->all(FLERR,"Pair style lj/cutio/coul/dsf requires atom attribute q");
+  init_ionization();
 
   neighbor->add_request(this);
 
@@ -371,9 +359,6 @@ void PairLJCutIOCoulDSF::init_style()
   f_shift = -(erfcc/cut_coulsq + 2.0/MY_PIS*alpha*erfcd/cut_coul);
   e_shift = erfcc/cut_coul - f_shift*cut_coul;
 
-  comm_forward = 3;
-  comm_reverse=3;
-  comm_reverse_off=3;
 }
 
 /* ----------------------------------------------------------------------
@@ -592,518 +577,234 @@ void *PairLJCutIOCoulDSF::extract(const char *str, int &dim)
 }
 
 
+void PairLJCutIOCoulDSF::init_ionization()
+{
+  if (!atom->q_flag || !atom->rmass_flag || atom->map_style == Atom::MAP_NONE)
+    error->all(FLERR,"Ionization requires q, per-atom mass, and an atom map");
+  if (strcmp(update->unit_style,"real") != 0)
+    error->all(FLERR,"Pair lj/cutio/coul/dsf requires units real and thresholds in kJ/mol");
+
+  int flag, cols;
+  label_index = atom->find_custom("label", flag, cols);
+  if (label_index < 0 || flag != 0 || cols != 0)
+    error->all(FLERR,"Ionization requires a custom integer vector i_label");
+  mindist_index = atom->find_custom("mindist", flag, cols);
+  if (mindist_index < 0 || flag != 1 || cols != 0)
+    error->all(FLERR,"Ionization requires a custom double vector d_mindist");
+
+  comm_forward = 6;       // q, vx, vy, vz, mindist, label
+  comm_reverse = 2;       // nearest-candidate distance and tag
+  comm_reverse_off = 2;   // same reduction also works with Newton pair off
+}
+
+/* ---------------------------------------------------------------------- */
+
+void PairLJCutIOCoulDSF::ionization_pipeline()
+{
+  auto v = atom->v;
+  auto q = atom->q;
+  auto label = atom->ivector[label_index];
+  auto mindist = atom->dvector[mindist_index];
+
+  // Both owners of a cross-rank pair evaluate the same pre-event snapshot.
+  // Each writes only owned state; ghosts remain immutable during this phase.
+  pack_flag = ION_STATE;
+  comm->forward_comm(this);
+  ionization(v,q,label,mindist);
+  comm->forward_comm(this);
+
+  reset(label,mindist);
+  labelnext(v,q,label,mindist);
+
+  // Neighbors may nominate candidates for ghosts, including with half lists.
+  // Reduce to owners FIRST, then broadcast their final choices. This minimum
+  // reduction is idempotent for Newton-off and GPU full lists as well.
+  pack_flag = ION_CANDIDATES;
+  comm->reverse_comm(this);
+  comm->forward_comm(this);
+}
+
+/* ---------------------------------------------------------------------- */
+
+double PairLJCutIOCoulDSF::next_ionization_energy(int i, int itype, int jtype)
+{
+  const double charge = atom->q[i];
+  if (!std::isfinite(charge) || charge < 0.0 || charge > num_io ||
+      charge != std::floor(charge))
+    error->one(FLERR,"Ionization charge must be an integer between 0 and num_io");
+  const int qi = static_cast<int>(charge);
+  if (qi == num_io) return std::numeric_limits<double>::infinity();
+  // Pair coefficients are stored in the upper triangle.
+  return iopo[qi][MIN(itype,jtype)][MAX(itype,jtype)];
+}
+
+/* ---------------------------------------------------------------------- */
+
 void PairLJCutIOCoulDSF::reset(int *label, double *mindist)
 {
-   int i,j,ii,jj,inum,jnum,itype,jtype;
-  double qtmp,xtmp,ytmp,ztmp,delx,dely,delz,evdwl,ecoul,fpair;
-  double r,rsq,r2inv,r6inv,forcecoul,forcelj,factor_coul,factor_lj;
-  double prefactor,erfcc,erfcd,t;
-  int *ilist,*jlist,*numneigh,**firstneigh;
-
-  evdwl = ecoul = 0.0;
-  //ev_init(eflag,vflag);
-
-  //utils::logmesg(lmp,"DEBUG 1 \n");
-
-  double **x = atom->x;
-  double **f = atom->f;
-  double *q = atom->q;
-  double **v=atom->v;
-  double *m=atom->rmass;
-  int *type = atom->type;
-  int nlocal = atom->nlocal;
-  double *special_lj = force->special_lj;
-  double *special_coul = force->special_coul;
-  int newton_pair = force->newton_pair;
-  double qqrd2e = force->qqrd2e; 
-
-  inum = list->inum;
-  ilist = list->ilist;
-  numneigh = list->numneigh;
-  firstneigh = list->firstneigh;
-
-  for (ii = 0; ii < inum; ii++) {
-    i = ilist[ii];
-    qtmp = q[i];
-    xtmp = x[i][0];
-    ytmp = x[i][1];
-    ztmp = x[i][2];
-    itype = type[i];
-    jlist = firstneigh[i];
-    jnum = numneigh[i];
-
-    for (jj = 0; jj < jnum; jj++) {
-      j = jlist[jj];
-      factor_lj = special_lj[sbmask(j)];
-      factor_coul = special_coul[sbmask(j)];
-      j &= NEIGHMASK;
-
-      delx = xtmp - x[j][0];
-      dely = ytmp - x[j][1];
-      delz = ztmp - x[j][2];
-      rsq = delx*delx + dely*dely + delz*delz;
-      r=sqrt(rsq);
-      jtype = type[j];
-      
-      //label[j]=-1; mindist[j]=BIG;
-      if (rsq<cutsq[itype][jtype] && r < cut_io) {
-        label[i]=-1; mindist[i]=BIG;
-        label[j]=-1; mindist[j]=BIG;
-      }
-    }  //second j loop
+  // Clear stale labels even when their former partner has left the halo.
+  for (int i = 0; i < atom->nlocal + atom->nghost; ++i) {
+    label[i] = -1;
+    mindist[i] = BIG;
   }
-
-
 }
 
-void PairLJCutIOCoulDSF::ionization(double** v, double* q, int *label, double* mindist)
+/* ---------------------------------------------------------------------- */
+
+void PairLJCutIOCoulDSF::ionization(double **v, double *q, int *label, double *mindist)
 {
-  int i,j,ii,jj,inum,jnum,itype,jtype;
-  double qtmp,xtmp,ytmp,ztmp,delx,dely,delz,evdwl,ecoul,fpair;
-  double r,rsq,r2inv,r6inv,forcecoul,forcelj,factor_coul,factor_lj;
-  double prefactor,erfcc,erfcd,t;
-  int *ilist,*jlist,*numneigh,**firstneigh;
-  //utils::logmesg(lmp,"DEBUG 1 \n");
+  auto x = atom->x;
+  auto m = atom->rmass;
+  auto tag = atom->tag;
+  auto type = atom->type;
+  const int nlocal = atom->nlocal;
+  const double cut_iosq = cut_io * cut_io;
 
-  double **x = atom->x;
-  double *m=atom->rmass;
-  int *type = atom->type;
-  int nlocal = atom->nlocal;
-  double *special_lj = force->special_lj;
-  double *special_coul = force->special_coul;
-  int newton_pair = force->newton_pair;
-  double qqrd2e = force->qqrd2e; 
+  for (int ii = 0; ii < list->inum; ++ii) {
+    const int i = list->ilist[ii];
+    if (label[i] <= 0) continue;
+    const int j = atom->map(label[i]);
+    // Labels refer to the previous timestep. Losing a partner from the ghost
+    // halo is normal and cannot be treated as an invalid array access.
+    if (j < 0 || j >= nlocal + atom->nghost || tag[i] == tag[j] ||
+        label[j] != tag[i]) continue;
 
+    const int itype = type[i], jtype = type[j];
+    double dx = x[i][0] - x[j][0];
+    double dy = x[i][1] - x[j][1];
+    double dz = x[i][2] - x[j][2];
+    domain->minimum_image(dx,dy,dz);
+    const double rsq = dx*dx + dy*dy + dz*dz;
+    if (rsq >= cutsq[itype][jtype] || rsq >= cut_iosq) continue;
 
-  inum = list->inum;
-  ilist = list->ilist;
-  numneigh = list->numneigh;
-  firstneigh = list->firstneigh;
-  for (ii = 0; ii < inum; ii++) {
-    i = ilist[ii];
-    qtmp = q[i];
-    xtmp = x[i][0];
-    ytmp = x[i][1];
-    ztmp = x[i][2];
-    itype = type[i];
-    jlist = firstneigh[i];
-    jnum = numneigh[i];
+    const double chi_i = next_ionization_energy(i,itype,jtype);
+    const double chi_j = next_ionization_energy(j,itype,jtype);
+    const int target = (chi_i < chi_j || (chi_i == chi_j && tag[i] < tag[j])) ? i : j;
+    const double chi = (target == i) ? chi_i : chi_j;
+    const double energy = collision_energy(m[i],m[j],v[i],v[j]);
+    if (energy <= chi) continue; // Strict threshold; also handles zero relative speed.
 
-    int flag=0;  // if ionization happens
-    int jlocal = -1;
-    if (label[i] > 0) {
-      jlocal = atom->map(label[i]);
-      int nall = atom->nlocal + atom->nghost;
-      if (jlocal < 0 || jlocal >= nall) {
-        utils::logmesg(lmp,
-          "[ION] step {}: invalid partner mapping: "
-          "i_local={} tag_i={} label[i]={} jlocal={} nall={}\n",
-          update->ntimestep,
-          i, (atom->tag)[i], label[i], jlocal, nall);
-        error->one(FLERR, "Ionization: atom->map(label[i]) out of range");
-      }
+    // Ruuth et al., PRE 66, 036310 (2002), Sec. II.G, pp. 6-7:
+    // subtract chi, then retain 2/3 of the remaining COM-frame kinetic energy.
+    const double scale = sqrt((2.0/3.0) * (1.0 - chi/energy));
+    double vi[3], vj[3];
+    const double mass_sum = m[i] + m[j];
+    for (int d = 0; d < 3; ++d) {
+      const double com = (m[i]/mass_sum)*v[i][d] + (m[j]/mass_sum)*v[j][d];
+      vi[d] = com + scale * (v[i][d] - com);
+      vj[d] = com + scale * (v[j][d] - com);
     }
-
-
-    // //before the loop start
-    // //Label Match checking
-    //for (jj = 0; jj < jnum; jj++) {
-    if(jlocal>0){
-      j = jlocal;
-      j &= NEIGHMASK;
-
-      delx = xtmp - x[j][0];
-      dely = ytmp - x[j][1];
-      delz = ztmp - x[j][2];
-      rsq = delx*delx + dely*dely + delz*delz;
-      jtype = type[j];
-
-      r=sqrt(rsq);
-      
-      //int llabel=label[i];
-      // if(rsq <cutsq[itype][jtype])
-      // utils::logmesg(lmp,"In step {}, i_id is {}, j_id is {} \n",update->ntimestep,i_id,j_id);
-
-      if(rsq <cutsq[itype][jtype]&& r<cut_io && label[i]==(atom->tag)[j] && label[j]==(atom->tag)[i]) //label match
-      {
-        // recheck energy
-        //double check the energy avoid shifting from last step
-        double kinenergy_i=1e4*1.0/2.0*m[i]*(v[i][0]*v[i][0]+v[i][1]*v[i][1]+v[i][2]*v[i][2]);
-        double kinenergy_j=1e4*1.0/2.0*m[j]*(v[j][0]*v[j][0]+v[j][1]*v[j][1]+v[j][2]*v[j][2]);
-        double kinenergy_sum=kinenergy_i+kinenergy_j;
-
-        int i_res = num_io - int(q[i]);
-        int j_res = num_io - int(q[j]);
-
-        // --- Crash-time debug guard for q-index ---
-        int qi = static_cast<int>(q[i]);
-        int qj = static_cast<int>(q[j]);
-
-        if (qi < 0 || qi >= num_io || qj < 0 || qj >= num_io) {
-          utils::logmesg(lmp,
-            "[ION] step {}: invalid q index in ionization: "
-            "i_local={} tag_i={} qi={} j_local={} tag_j={} qj={} num_io={}\n",
-            update->ntimestep,
-            i, (atom->tag)[i], qi,
-            j, (atom->tag)[j], qj, num_io);
-
-          error->one(FLERR, "Ionization: q index out of range (iopo access)");
-        }
-
-        // safe access now
-        double i_ionext = (i_res != 0) ? iopo[qi][itype][jtype] : MAXENERGY;
-        double j_ionext = (j_res != 0) ? iopo[qj][itype][jtype] : MAXENERGY;
-
-
-        int i_id=(atom->tag)[i];  int j_id=(atom->tag)[j];
-        double ivscale=1.0; double jvscale=1.0;
-        //double iqtmp=q[i]; double jqtmp=q[j];
-
-        if((i_res>0&&kinenergy_sum>i_ionext)||(j_res>0&&kinenergy_sum>j_ionext))
-        {
-          flag=1;  //ionization happens
-          int tempi=i;
-          // utils::logmesg(lmp,"IODEBUG INITAL: step {} qi {} qj {} i_io {} j_io {} tagi {} tagj {} ionized id {} energy {} ifsame {}\n",
-          //         update->ntimestep,q[i],q[j],i_ionext,j_ionext,i_id,j_id,(atom->tag)[tempi],kinenergy_sum,j<nlocal);
-          //define cusomized symmetric ionization order here
-          if (fabs(i_ionext-j_ionext)<EPSILON)
-            //if have the same ionization energy, always pick the atom with a smaller global id
-            tempi=(i_id<j_id)?i:j;
-          else if (i_ionext>j_ionext)
-            tempi=j;
-
-          double io_next=(tempi==i)?i_ionext:j_ionext;
-
-          //loop i
-          double kinenergy_res=2.0/3.0*(kinenergy_i-io_next*kinenergy_i/kinenergy_sum);
-          //kinenergy_res=(kinenergy_i-io_next*kinenergy_i/kinenergy_sum);
-          double v_scale=sqrt(kinenergy_res/kinenergy_i);
-          ivscale*=v_scale;
-          kinenergy_i=kinenergy_res;
-
-          //loop j
-          kinenergy_res=2.0/3.0*(kinenergy_j-io_next*kinenergy_j/kinenergy_sum);
-          //kinenergy_res=(kinenergy_j-io_next*kinenergy_j/kinenergy_sum);
-          v_scale=sqrt(kinenergy_res/kinenergy_j);
-          jvscale*=v_scale;
-          kinenergy_j=kinenergy_res;
-
-          //increament q
-          //q[tempi]++;
-          if(tempi==i) q[i]=q[i]+1.0;
-          else q[j]=q[j]+1.0;
-
-
-          i_res=num_io-int(q[i]);
-          j_res=num_io-int(q[j]);
-          
-          // --- Crash-time guard again after q changed ---
-          qi = static_cast<int>(q[i]);
-          qj = static_cast<int>(q[j]);
-
-          if (qi < 0 || qi >= num_io || qj < 0 || qj >= num_io) {
-            utils::logmesg(lmp,
-              "[ION] step {}: invalid q index AFTER ionization update: "
-              "i_local={} tag_i={} qi={} j_local={} tag_j={} qj={} num_io={}\n",
-              update->ntimestep,
-              i, (atom->tag)[i], qi,
-              j, (atom->tag)[j], qj, num_io);
-
-            error->one(FLERR, "Ionization: q index out of range after update");
-          }
-
-          //update the io energy
-          i_ionext=(i_res!=0)?iopo[int(q[i])][itype][jtype]:MAXENERGY;
-          j_ionext=(j_res!=0)?iopo[int(q[j])][itype][jtype]:MAXENERGY;
-
-          v[i][0]*=ivscale; v[i][1]*=ivscale; v[i][2]*=ivscale; 
-
-          v[j][0]*=jvscale; v[j][1]*=jvscale; v[j][2]*=jvscale;
-
-          label[i]=-1; label[j]=-1;  // avoid mutilple ionization in one round
-          mindist[i]=BIG; mindist[j]=BIG;
-
-          //kinenergy_sum=kinenergy_i+kinenergy_j;
-          
-          // utils::logmesg(lmp,"IODEBUG COMPUTE: step {} qi {} qj {} i_io {} j_io {} tagi {} tagj {} ionized id {} energy {} cutoff {}\n",
-          //         update->ntimestep,q[i],q[j],i_ionext,j_ionext,i_id,j_id,(atom->tag)[tempi],kinenergy_sum,cutsq[itype][jtype]);
-        }
-        
-        //break;
-      }
-
-    }  //first j loop
-  } //first i loop
+    for (int d = 0; d < 3; ++d) v[i][d] = vi[d];
+    if (target < nlocal) q[target] += 1.0;
+    label[i] = -1;
+    mindist[i] = BIG;
+    if (j < nlocal) {
+      for (int d = 0; d < 3; ++d) v[j][d] = vj[d];
+      label[j] = -1;
+      mindist[j] = BIG;
+    }
+    // For a ghost j, its owner performs j's update from the same snapshot.
+    // Never write a ghost velocity or charge that might not reach its owner.
+  }
 }
 
-void PairLJCutIOCoulDSF::labelnext(double**v, double* q, int * label, double* mindist)
+/* ---------------------------------------------------------------------- */
+
+void PairLJCutIOCoulDSF::labelnext(double **v, double *q, int *label, double *mindist)
 {
-  int i,j,ii,jj,inum,jnum,itype,jtype;
-  double qtmp,xtmp,ytmp,ztmp,delx,dely,delz,evdwl,ecoul,fpair;
-  double r,rsq,r2inv,r6inv,forcecoul,forcelj,factor_coul,factor_lj;
-  double prefactor,erfcc,erfcd,t;
-  int *ilist,*jlist,*numneigh,**firstneigh;
+  auto x = atom->x;
+  auto m = atom->rmass;
+  auto type = atom->type;
+  auto tag = atom->tag;
+  const double cut_iosq = cut_io * cut_io;
 
-  
-  //utils::logmesg(lmp,"DEBUG 1 \n");
+  for (int ii = 0; ii < list->inum; ++ii) {
+    const int i = list->ilist[ii];
+    for (int jj = 0; jj < list->numneigh[i]; ++jj) {
+      const int j = list->firstneigh[i][jj] & NEIGHMASK;
+      if (tag[i] == tag[j]) continue;
+      const double dx = x[i][0] - x[j][0];
+      const double dy = x[i][1] - x[j][1];
+      const double dz = x[i][2] - x[j][2];
+      const double rsq = dx*dx + dy*dy + dz*dz;
+      const int itype = type[i], jtype = type[j];
+      if (rsq >= cutsq[itype][jtype] || rsq >= cut_iosq) continue;
 
-  double **x = atom->x;
-  double *m=atom->rmass;
-  int *type = atom->type;
-  int nlocal = atom->nlocal;
-  double *special_lj = force->special_lj;
-  double *special_coul = force->special_coul;
-  int newton_pair = force->newton_pair;
-  double qqrd2e = force->qqrd2e; 
-
-  inum = list->inum;
-  ilist = list->ilist;
-  numneigh = list->numneigh;
-  firstneigh = list->firstneigh;
-  
-  for (ii = 0; ii < inum; ii++) {
-      i = ilist[ii];
-      qtmp = q[i];
-      xtmp = x[i][0];
-      ytmp = x[i][1];
-      ztmp = x[i][2];
-      itype = type[i];
-      jlist = firstneigh[i];
-      jnum = numneigh[i];
-    for (jj = 0; jj < jnum; jj++) {
-      j = jlist[jj];
-      factor_lj = special_lj[sbmask(j)];
-      factor_coul = special_coul[sbmask(j)];
-      j &= NEIGHMASK;
-
-      delx = xtmp - x[j][0];
-      dely = ytmp - x[j][1];
-      delz = ztmp - x[j][2];
-      rsq = delx*delx + dely*dely + delz*delz;
-      r=sqrt(rsq);
-      jtype = type[j];
-
-      if (rsq < cutsq[itype][jtype]) {
-        
-        if(r<cut_io)
-        {
-            // Extension for ionization
-          double kinenergy_i=1e4*1.0/2.0*m[i]*(v[i][0]*v[i][0]+v[i][1]*v[i][1]+v[i][2]*v[i][2]);
-          int qi = static_cast<int>(q[i]);
-          int i_res = num_io - qi;
-
-          // Crash-time guard for q[i]
-          if (qi < 0 || qi >= num_io) {
-            utils::logmesg(lmp,
-              "[LABELNEXT] step {}: invalid qi index: "
-              "i_local={} tag_i={} qi={} num_io={}\n",
-              update->ntimestep,
-              i, (atom->tag)[i], qi, num_io);
-            error->one(FLERR, "Labelnext: q[i] index out of range (iopo access)");
-          }
-          double i_ionext=(i_res!=0)?iopo[int(q[i])][itype][jtype]:MAXENERGY;
-          int i_id=(atom->tag)[i];
-
-          int j_id=(atom->tag)[j];
-          double kinenergy_j=1e4*1.0/2.0*m[j]*(v[j][0]*v[j][0]+v[j][1]*v[j][1]+v[j][2]*v[j][2]);
-          int qj = static_cast<int>(q[j]);  
-          int j_res = num_io - qj;
-
-          if (qj < 0 || qj >= num_io) {
-            utils::logmesg(lmp,
-              "[LABELNEXT] step {}: invalid qj index: "
-              "j_local={} tag_j={} qj={} num_io={}\n",
-              update->ntimestep,
-              j, (atom->tag)[j], qj, num_io);
-            error->one(FLERR, "Labelnext: q[j] index out of range (iopo access)");
-          }
-          double j_ionext=(j_res!=0)?iopo[int(q[j])][itype][jtype]:MAXENERGY;
-          double kinenergy_sum=kinenergy_i+kinenergy_j;
-          
-          // update the possible ionization events
-          if ((i_res > 0 && kinenergy_sum > i_ionext) || (j_res > 0 && kinenergy_sum > j_ionext)) {
-              // utils::logmesg(lmp,"Labelnext COMPUTE: step {} qi {} qj {} i_io {} j_io {} tagi {} tagj {}  energy {} cutoff {}\n",
-              //     update->ntimestep,q[i],q[j],i_ionext,j_ionext,i_id,j_id,kinenergy_sum,cutsq[itype][jtype]);
-              // Process for `i`
-              if (rsq <= mindist[i] - EPSILON || (rsq <= mindist[i] + EPSILON && label[i]>=j_id))  {
-                  label[i] = j_id;
-                  mindist[i] = rsq;
-              }
-
-              // Process for `j`
-              if (rsq <= mindist[j] - EPSILON || (rsq <= mindist[j] + EPSILON && label[j]>=i_id)) {
-                  label[j] = i_id;
-                  mindist[j] = rsq;
-              }
-          }
-
-        }
-        
+      const double chi_i = next_ionization_energy(i,itype,jtype);
+      const double chi_j = next_ionization_energy(j,itype,jtype);
+      const double energy = collision_energy(m[i],m[j],v[i],v[j]);
+      if (energy <= MIN(chi_i,chi_j)) continue;
+      if (nearer(rsq,tag[j],mindist[i],label[i])) {
+        label[i] = tag[j];
+        mindist[i] = rsq;
       }
-    } // second j loop
-  } //second i loop
-
+      if (nearer(rsq,tag[i],mindist[j],label[j])) {
+        label[j] = tag[i];
+        mindist[j] = rsq;
+      }
+    }
+  }
 }
 
 /* ---------------------------------------------------------------------- */
 
-int PairLJCutIOCoulDSF::pack_forward_comm(int n, int *list, double *buf, int /*pbc_flag*/, int * /*pbc*/) {
-    if (pack_flag == 1) {
-        // Communicate only q
-        for (int i = 0; i < n; i++) {
-            buf[i] = atom->q[list[i]]; // Pack q
-        }
-        return n; // Number of packed values
-    } else if (pack_flag == 2) {   // reset all pair
-        // Communicate only mindist
-        for (int i = 0; i < n; i++) {
-            buf[2 * i] = BIG; // Pack mindist
-            buf[2 * i + 1] = ubuf(-1).d;; // Pack label as int using ubuf
-        }
-        return 2 * n; // Number of packed values
-    } else if (pack_flag == 3) {
-        // Communicate only mindist
-        for (int i = 0; i < n; i++) {
-            buf[2 * i] = atom->dvector[0][list[i]]; // Pack mindist
-            buf[2 * i + 1] = ubuf(atom->ivector[1][list[i]]).d; // Pack label as int using ubuf
-        }
-        return 2 * n; // Number of packed values
-    }  else if (pack_flag == 4) {
-        for (int i = 0; i < n; i++) {
-            buf[3 * i] = atom->q[list[i]];               // Pack q
-            buf[3 * i + 1] = atom->dvector[0][list[i]]; // Pack mindist
-            buf[3 * i + 2] = ubuf(atom->ivector[1][list[i]]).d; // Pack label as int using ubuf
-        }
-        return 3 * n; // Total number of packed values
+int PairLJCutIOCoulDSF::pack_forward_comm(int n, int *list, double *buf, int, int *)
+{
+  int k = 0;
+  for (int ii = 0; ii < n; ++ii) {
+    const int i = list[ii];
+    if (pack_flag == ION_STATE) {
+      buf[k++] = atom->q[i];
+      for (int d = 0; d < 3; ++d) buf[k++] = atom->v[i][d];
     }
-    return 0; // Default case (should not be reached)
-}
-
-
-/* ---------------------------------------------------------------------- */
-
-void PairLJCutIOCoulDSF::unpack_forward_comm(int n, int first, double *buf) {
-
-  int clabel,buflabel;
-  double cmindist,bufmindist;
-    if (pack_flag == 1) {
-        // Unpack q
-        for (int i = 0; i < n; i++) {
-            atom->q[first + i] = std::max(buf[i],atom->q[first+i]); // Unpack q
-        }
-    } else if (pack_flag == 2) {
-        // Unpack mindist
-        for (int i = 0; i < n; i++) {
-            atom->dvector[0][first + i] = buf[2 * i];;  // Unpack mindist
-            atom->ivector[1][first + i] = static_cast<int>(ubuf(buf[2 * i + 1]).i); // Unpack label as int
-            
-        }
-    } else if (pack_flag == 3) {
-        // Unpack mindist
-        for (int i = 0; i < n; i++) {
-            cmindist=atom->dvector[0][first + i]; clabel=atom->ivector[1][first + i];
-            bufmindist=buf[2 * i]; buflabel=static_cast<int>(ubuf(buf[2 * i + 1]).i); 
-            
-            if(bufmindist<=cmindist-EPSILON || (bufmindist<=cmindist+EPSILON&&clabel>=buflabel))
-            {
-                atom->dvector[0][first + i] = bufmindist;  // Unpack mindist
-                atom->ivector[1][first + i] = buflabel; // Unpack label as int
-            }
-        }
-    }  else if (pack_flag == 4) {
-        for (int i = 0; i < n; i++) {
-            atom->q[first + i] = std::max(buf[3 * i],atom->q[first + i]);               // Unpack q
-            cmindist=atom->dvector[0][first + i]; clabel=atom->ivector[1][first + i];
-            bufmindist=buf[3 * i + 1]; buflabel=static_cast<int>(ubuf(buf[3 * i + 2]).i); 
-            
-            if(bufmindist<=cmindist-EPSILON || (bufmindist<=cmindist+EPSILON&&clabel>=buflabel))
-            {
-              atom->dvector[0][first + i] = bufmindist;  // Unpack mindist
-              atom->ivector[1][first + i] = buflabel; // Unpack label as int
-            }
-
-        }
-    }
-}
-
-
-/* ---------------------------------------------------------------------- */
-
-int PairLJCutIOCoulDSF::pack_reverse_comm(int n, int first, double *buf) {
-    if (pack_flag == 1) {
-        // Communicate only q
-        for (int i = 0; i < n; i++) {
-            buf[i] = atom->q[first + i]; // Pack q
-        }
-        return n; // Number of packed values
-    } else if (pack_flag == 2) {
-        // Communicate only mindist
-        for (int i = 0; i < n; i++) {
-            buf[2 * i ] = BIG;  // Pack mindist
-            buf[2 * i + 1] = ubuf(-1).d; // Pack label as int using ubuf
-        }
-        return 2 * n; // Total number of packed values
-    } else if (pack_flag == 3) {
-        // Communicate only mindist
-        for (int i = 0; i < n; i++) {
-            buf[2 * i ] = atom->dvector[0][first + i];  // Pack mindist
-            buf[2 * i + 1] = ubuf(atom->ivector[1][first + i]).d; // Pack label as int using ubuf
-        }
-        return 2 * n; // Total number of packed values
-    } else if (pack_flag == 4) {
-        for (int i = 0; i < n; i++) {
-            buf[3 * i] = atom->q[first + i];               // Pack q
-            buf[3 * i + 1] = atom->dvector[0][first + i];  // Pack mindist
-            buf[3 * i + 2] = ubuf(atom->ivector[1][first + i]).d; // Pack label as int using ubuf
-        }
-        return 3 * n; // Total number of packed values
-    }
-    return 0; // Default case (should not be reached)
+    buf[k++] = atom->dvector[mindist_index][i];
+    buf[k++] = ubuf(atom->ivector[label_index][i]).d;
+  }
+  return k;
 }
 
 /* ---------------------------------------------------------------------- */
 
-void PairLJCutIOCoulDSF::unpack_reverse_comm(int n, int *list, double *buf) {
-  // pack flag =1,2,3 is only for debug usage, should never be called in the SL simulation
-    int clabel,buflabel;
-    double cmindist,bufmindist;
-    if (pack_flag == 1) {
-        // update q
-        for (int i = 0; i < n; i++) {
-            atom->q[list[i]] = std::max(buf[i], atom->q[list[i]]); // update q contributions
-        }
-    } else if (pack_flag == 2) {
-        // update mindist
-        for (int i = 0; i < n; i++) {
-            atom->dvector[0][list[i]] = buf[2 * i];  // Unpack mindist
-            atom->ivector[1][list[i]] = static_cast<int>(ubuf(buf[2 * i + 1]).i); // Unpack label as int
-        }
-    } else if (pack_flag == 3) {
-        // update mindist
-        for (int i = 0; i < n; i++) {
-            cmindist=atom->dvector[0][list[i]]; clabel=atom->ivector[1][list[i]];
-            bufmindist=buf[2 * i]; buflabel=static_cast<int>(ubuf(buf[2 * i + 1]).i); 
-
-            if(bufmindist<=cmindist-EPSILON || (bufmindist<=cmindist+EPSILON&&clabel>=buflabel))
-            {
-              atom->dvector[0][list[i]] = bufmindist;  // Unpack mindist
-              atom->ivector[1][list[i]] = buflabel; // Unpack label as int
-            }
-        }
-    }  else if (pack_flag == 4) {
-        for (int i = 0; i < n; i++) {
-            atom->q[list[i]] = std::max(atom->q[list[i]],buf[3 * i]);     // if ionization happens, then q must increase
-            cmindist=atom->dvector[0][list[i]]; clabel=atom->ivector[1][list[i]];
-            bufmindist=buf[3 * i + 1]; buflabel=static_cast<int>(ubuf(buf[3 * i + 2]).i); 
-
-            if(bufmindist<=cmindist-EPSILON || (bufmindist<=cmindist+EPSILON&&clabel>=buflabel))
-            {
-                atom->dvector[0][list[i]] = bufmindist;  // Unpack mindist
-                atom->ivector[1][list[i]] = buflabel; // Unpack label as int
-            }
-
-        }
+void PairLJCutIOCoulDSF::unpack_forward_comm(int n, int first, double *buf)
+{
+  int k = 0;
+  for (int i = first; i < first+n; ++i) {
+    if (pack_flag == ION_STATE) {
+      atom->q[i] = buf[k++];
+      for (int d = 0; d < 3; ++d) atom->v[i][d] = buf[k++];
     }
+    atom->dvector[mindist_index][i] = buf[k++];
+    atom->ivector[label_index][i] = ubuf(buf[k++]).i;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+
+int PairLJCutIOCoulDSF::pack_reverse_comm(int n, int first, double *buf)
+{
+  int k = 0;
+  for (int i = first; i < first+n; ++i) {
+    buf[k++] = atom->dvector[mindist_index][i];
+    buf[k++] = ubuf(atom->ivector[label_index][i]).d;
+  }
+  return k;
+}
+
+/* ---------------------------------------------------------------------- */
+
+void PairLJCutIOCoulDSF::unpack_reverse_comm(int n, int *list, double *buf)
+{
+  for (int ii = 0; ii < n; ++ii) {
+    const int i = list[ii];
+    const double distance = buf[2*ii];
+    const int tag = ubuf(buf[2*ii+1]).i;
+    auto mindist = atom->dvector[mindist_index];
+    auto label = atom->ivector[label_index];
+    if (tag > 0 && nearer(distance,tag,mindist[i],label[i])) {
+      mindist[i] = distance;
+      label[i] = tag;
+    }
+  }
 }
 
 void PairLJCutIOCoulDSF::variable_check()

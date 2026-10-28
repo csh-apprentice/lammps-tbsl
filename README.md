@@ -68,7 +68,18 @@ pair_coeff * * 8 <I1> <I2> <I3> <I4> <I5> <I6> <I7> <I8> \
     <epsilon_lj> <sigma_lj> v_active <scalefactor>
 ```
 
-`v_active` is an equal-style variable; set it to `step > restart_step` to suppress ionization at a restart's first step (see [Restart Tutorial](examples/TBSL/RESTART_TUTORIAL.md)).
+The COM revision uses the relative collision energy
+`E_rel = 0.5e4 * mi*mj/(mi+mj) * |vi-vj|^2` in both candidate selection and
+execution. With `units real`, the thresholds are supplied in kJ/mol. An accepted
+event preserves pair momentum and retains `(2/3)*(E_rel-I_next)` in the relative
+motion, following Ruuth et al. (2002).
+
+`v_active` is an equal-style variable. In the custom dump restart, use
+`step > restart_step` together with `read_sldump` and `restartverlet` to preserve
+the loaded forces and avoid repeating the checkpoint's reaction. The inactive
+switch skips the entire pair computation, including forces; it is not a general
+ionization-only switch. See the [Restart Tutorial](examples/TBSL/RESTART_TUTORIAL.md)
+and the [COM deployment and validation notes](unittest/tbsl/DEPLOYMENT.md).
 
 A GPU-accelerated variant `pair lj/cutio/coul/dsf/gpu` is available; see [GPU Acceleration](#gpu-acceleration).
 

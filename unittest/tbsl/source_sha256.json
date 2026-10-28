@@ -1,0 +1,15 @@
+{
+  "scope": "COM ionization CPU deployment; production sources match the completed local validation. Source hashes, not toolchain-dependent binary hashes.",
+  "sha256": {
+    "src/pair_lj_cutio_coul_dsf.cpp": "1e2f8293237cc121854f592b524aca5c097407002bd787131eaae5fe73c7b53f",
+    "src/pair_lj_cutio_coul_dsf.h": "da732dcc492d4ca28039411477e1cac28c84bd9edd3bb7f7953268f0351ab8b7",
+    "src/GPU/pair_lj_cutio_coul_dsf_gpu.cpp": "f367acebd083e314c3bd8dec05b27cf082c49abc950c0e0d0880daf47abf7b71",
+    "src/read_sldump.cpp": "74435b64dc2062db7c82cdb65f5c27ef380c5ec145fb6860ab5cb5f0ab60dce6",
+    "src/restartverlet.cpp": "2e7be4f865c9e265441bf6e19936826ae3523668cb17f0889fa8587f20fa0407",
+    "src/fix_wall_mdhb.cpp": "618abb23518a7a8cb18a2eb405be597c9043567a29015dde44cd66d5fc22c3a5",
+    "src/region_kmsphere.cpp": "1ef029842094fa37940ad1c938a719159020e557b836cf6a8c61520e43ed7e22",
+    "unittest/tbsl/test_ionization_pair.cpp": "dd8dd4c213be3871e9a9820161edfd0ef0d1b6c936797eb9c69d7da032f2b4c7",
+    "unittest/tbsl/review/probes.cpp": "bd87f310c221f5d566af8b15f761eec18a38bd9e2d63b95b35fc4a2b0c6faf88",
+    "unittest/tbsl/review/custom_restart/protocol.cpp": "3b9b8eb6188474ccd3ab49a52b28230b0a6a7dac4450241ce92e62c97a565a74"
+  }
+}
