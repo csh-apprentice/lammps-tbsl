@@ -311,6 +311,13 @@ python scaffold/compare_restart.py \
 
 ---
 
+## Analysis and Paper Figures
+
+Portable evaluation, Saha--LTE emission diagnostics, and manuscript figure
+recipes are in [tools/TBSL/analysis](tools/TBSL/analysis/README.md). They read
+existing output, support configurable input/output paths, and record input
+and source hashes. Start with `python3 tools/TBSL/analysis/run.py --list`.
+
 ## Repository Layout
 
 ```

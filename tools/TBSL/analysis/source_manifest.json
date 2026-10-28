@@ -1,0 +1,96 @@
+{
+  "source_host": "hyde03.dabh.io",
+  "source_directory": "/home/shihan/projects/sonoluminescence/lammps/analysis",
+  "resolved_directory": "/data/shihan/sonoluminescence/analysis",
+  "retrieved_date": "2026-10-27",
+  "original_files": [
+    {
+      "path": "appendix_figures.py",
+      "sha256": "f4a9af6836bd4b3f6f4d01a1f26510933b1e81a1f1a92520bfaf1b262f62315d",
+      "bytes": 27226
+    },
+    {
+      "path": "performance_analysis.py",
+      "sha256": "77be5ba92786345f6fd14c907d262e95f4a7bf3d632c8b9a559be241fbe77adf",
+      "bytes": 23757
+    },
+    {
+      "path": "section_3_theory_comparison.py",
+      "sha256": "8ec91927798a96061de59483b490023508f0cee446f4631ba61214b49685322f",
+      "bytes": 6547
+    },
+    {
+      "path": "section_7_1_convergence.py",
+      "sha256": "9d8f898db1d7adf560e227cb9a3f234d7b691b03dba5eaa82014bb3dc821eb7a",
+      "bytes": 12546
+    },
+    {
+      "path": "section_7_2_boundary.py",
+      "sha256": "c28fcaab4fbf9353d2bd3bf2bd1515837a60419ec920b0198f398bb3e66eda49",
+      "bytes": 8981
+    },
+    {
+      "path": "section_7_3_pair.py",
+      "sha256": "a0f1f99e2d3440a3df981289a704551f6859a802f40c5adc461146573480c5ed",
+      "bytes": 11519
+    },
+    {
+      "path": "section_7_4_table.py",
+      "sha256": "e7885c47d2b059b0aeea82e5cf55ebed78006ed63e7b92dd9ccabef66d22efd1",
+      "bytes": 10807
+    },
+    {
+      "path": "section_7_5_general.py",
+      "sha256": "45465b7264102adb3cec1ed2008f668aa2325bc8a07ad1dd741dd4eff1ce9569",
+      "bytes": 20657
+    },
+    {
+      "path": "section_8_1_convergence.py",
+      "sha256": "023229e7bdf0e8368a10a0e3e8c7e2d040051ada42ae4ee3e52dbb8a7ee5ca3a",
+      "bytes": 4526
+    },
+    {
+      "path": "utils/parse_data.py",
+      "sha256": "36ef202f3604c5a377b12a554ad4de9c7143e90732156ea8436c000b811903c2",
+      "bytes": 2828
+    },
+    {
+      "path": "utils/plot_data.py",
+      "sha256": "0fe74b1f75eccd39f367e962661baa0a69c99282104c21178e7bbe8a03a7f867",
+      "bytes": 31396
+    },
+    {
+      "path": "utils/postprocess/merge_ave_chunk_bins.py",
+      "sha256": "d41972300b8f6cca0ea8e29eac2175f86801cd71227dfb7e745f6f08104bdce8",
+      "bytes": 9550
+    },
+    {
+      "path": "utils/postprocess/merge_ave_chunk_minN.py",
+      "sha256": "2edd3cd68ab70d32520e9b8b4624f2780e23cce18721de7bfebac530cf143c44",
+      "bytes": 12307
+    },
+    {
+      "path": "utils/postprocess/rebin_ave_chunk_to_x.py",
+      "sha256": "cee9edaaabd791e39fb39a2959a1875cfdf0dc4b390d3bcc8080fedb04123f85",
+      "bytes": 15108
+    },
+    {
+      "path": "utils/postprocess/smooth_ave_chunk_minN_keepbins.py",
+      "sha256": "d86e8332618e9c9f6598f0dabf6373845ac65ec8e923c2b5559e177c0d315530",
+      "bytes": 10592
+    },
+    {
+      "path": "utils/sl_saha_emission.py",
+      "sha256": "ba38601701e61200c234ebfe60ac92e8f629d435f3a7d9ec891f61b0a2b48f27",
+      "bytes": 33011
+    }
+  ],
+  "excluded": "Raw trajectories, large radial outputs, notebook outputs, obsolete emission module, ad hoc restart and CPU-column rewriting scripts.",
+  "port_changes": [
+    "Portable relative imports, configurable data/output roots and per-input replacements.",
+    "Strict complete-output parsers and explicit global/radial sampling alignment.",
+    "Stable equivalent Saha root and band fraction; SI electron/spectrum integration helpers.",
+    "Paper physical parameters, historical smoothing, display caps and table definitions retained.",
+    "New explicit-temperature single-run evaluator, figure map, regression fixtures and CI."
+  ]
+}

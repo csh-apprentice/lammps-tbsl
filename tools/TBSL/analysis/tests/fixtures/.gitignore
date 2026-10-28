@@ -1,0 +1,4 @@
+# Historical research data are local regression inputs, not public artifacts.
+*
+!.gitignore
+!README.md

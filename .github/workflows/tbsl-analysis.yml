@@ -1,0 +1,23 @@
+name: TBSL analysis
+on:
+  push:
+    paths: ['tools/TBSL/analysis/**', '.github/workflows/tbsl-analysis.yml']
+  pull_request:
+    paths: ['tools/TBSL/analysis/**', '.github/workflows/tbsl-analysis.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  numerical-checks:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '${{ matrix.python }}'
+      - run: python -m pip install -r tools/TBSL/analysis/requirements.txt
+      - run: python -m unittest discover -s tools/TBSL/analysis/tests -v
+      - run: python tools/TBSL/analysis/run.py cutoff --output-dir /tmp/tbsl-analysis-cutoff

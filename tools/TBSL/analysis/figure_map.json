@@ -1,0 +1,555 @@
+{
+  "manuscript_commit": "3a9f190953ace5034e9eb0ce7de8912f81bd05f1",
+  "panels": [
+    {
+      "manuscript_source": "sections/convergence.tex",
+      "target": "figs/convergence/Cutoff.pdf",
+      "recipes": [
+        "cutoff"
+      ],
+      "generated_paths": [
+        "figs/convergence/Cutoff.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/convergence.tex",
+      "target": "figs/convergence/Potential.pdf",
+      "recipes": [
+        "cutoff"
+      ],
+      "generated_paths": [
+        "figs/convergence/Potential.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/convergence.tex",
+      "target": "figs/performance/P1_timing_breakdown.pdf",
+      "recipes": [
+        "performance"
+      ],
+      "generated_paths": [
+        "figs/performance/P1_timing_breakdown.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/convergence.tex",
+      "target": "figs/performance/P3_time_vs_throughput_min_norm.pdf",
+      "recipes": [
+        "performance"
+      ],
+      "generated_paths": [
+        "figs/performance/P3_time_vs_throughput_min_norm.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/convergence.tex",
+      "target": "figs/performance/P4_time_vs_dt.pdf",
+      "recipes": [
+        "performance"
+      ],
+      "generated_paths": [
+        "figs/performance/P4_time_vs_dt.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/A1_heatmap_T_N1e6.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/A1_heatmap_T_N1e6.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/A1_heatmap_T_N1e7.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/A1_heatmap_T_N1e7.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/A1_heatmap_T_N1e8.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/A1_heatmap_T_N1e8.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/A2_heatmap_T_noio.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/A2_heatmap_T_noio.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/A2_heatmap_T_shortio.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/A2_heatmap_T_shortio.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/A2_heatmap_T_fullio.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/A2_heatmap_T_fullio.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/A3_heatmap_emission_alpha0.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/A3_heatmap_emission_alpha0.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/A3_heatmap_emission_alpha05.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/A3_heatmap_emission_alpha05.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/A3_heatmap_emission_alpha1.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/A3_heatmap_emission_alpha1.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/B1_radial_T_alpha_sweep.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/B1_radial_T_alpha_sweep.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/B1_radial_P_alpha_sweep.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/B1_radial_P_alpha_sweep.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/B1_radial_rho_alpha_sweep.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/B1_radial_rho_alpha_sweep.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/B2_radial_T_pair_sweep.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/B2_radial_T_pair_sweep.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/B2_radial_P_pair_sweep.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/B2_radial_P_pair_sweep.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/B2_radial_rho_pair_sweep.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/B2_radial_rho_pair_sweep.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/B3_radial_T_n_sweep.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/B3_radial_T_n_sweep.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/B3_radial_P_n_sweep.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/B3_radial_P_n_sweep.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/B3_radial_rho_n_sweep.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/B3_radial_rho_n_sweep.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/C1a_Tmax_bar.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/C1a_Tmax_bar.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/C1b_Tavmax_bar.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/C1b_Tavmax_bar.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/C1c_fion_bar.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/C1c_fion_bar.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/C1d_Rmin_bar.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/C1d_Rmin_bar.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/C1e_vWmax_bar.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/C1e_vWmax_bar.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/appendix.tex",
+      "target": "figs/appendix/C1f_pWmax_bar.pdf",
+      "recipes": [
+        "appendix"
+      ],
+      "generated_paths": [
+        "figs/appendix/C1f_pWmax_bar.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/theory.tex",
+      "target": "figs/section3_validation_radius.pdf",
+      "recipes": [
+        "theory"
+      ],
+      "generated_paths": [
+        "figs/results/section3_validation_radius.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/theory.tex",
+      "target": "figs/section3_temperature_model_comparison.pdf",
+      "recipes": [
+        "theory"
+      ],
+      "generated_paths": [
+        "figs/results/section3_temperature_model_comparison.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/scaling_global_radius.pdf",
+      "recipes": [
+        "scaling"
+      ],
+      "generated_paths": [
+        "figs/results/scaling_global_radius.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/scaling_global_avgT.pdf",
+      "recipes": [
+        "scaling"
+      ],
+      "generated_paths": [
+        "figs/results/scaling_global_avgT.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/scaling_global_avgP.pdf",
+      "recipes": [
+        "scaling"
+      ],
+      "generated_paths": [
+        "figs/results/scaling_global_avgP.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/scaling_radial_T.pdf",
+      "recipes": [
+        "scaling"
+      ],
+      "generated_paths": [
+        "figs/results/scaling_radial_T.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/scaling_radial_P.pdf",
+      "recipes": [
+        "scaling"
+      ],
+      "generated_paths": [
+        "figs/results/scaling_radial_P.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/scaling_radial_rho.pdf",
+      "recipes": [
+        "scaling"
+      ],
+      "generated_paths": [
+        "figs/results/scaling_radial_rho.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/boundary_avgT.pdf",
+      "recipes": [
+        "boundary"
+      ],
+      "generated_paths": [
+        "figs/results/boundary_avgT.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/boundary_Tcenter.pdf",
+      "recipes": [
+        "boundary"
+      ],
+      "generated_paths": [
+        "figs/results/boundary_Tcenter.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/boundary_Twall.pdf",
+      "recipes": [
+        "boundary"
+      ],
+      "generated_paths": [
+        "figs/results/boundary_Twall.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/boundary_heatmap_alpha0.pdf",
+      "recipes": [
+        "boundary"
+      ],
+      "generated_paths": [
+        "figs/results/boundary_heatmap_alpha0.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/boundary_heatmap_alpha05.pdf",
+      "recipes": [
+        "boundary"
+      ],
+      "generated_paths": [
+        "figs/results/boundary_heatmap_alpha05.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/boundary_heatmap_alpha1.pdf",
+      "recipes": [
+        "boundary"
+      ],
+      "generated_paths": [
+        "figs/results/boundary_heatmap_alpha1.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/pair_avgT.pdf",
+      "recipes": [
+        "pair"
+      ],
+      "generated_paths": [
+        "figs/results/pair_avgT.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/pair_Tcenter.pdf",
+      "recipes": [
+        "pair"
+      ],
+      "generated_paths": [
+        "figs/results/pair_Tcenter.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/pair_chargesum.pdf",
+      "recipes": [
+        "pair"
+      ],
+      "generated_paths": [
+        "figs/results/pair_chargesum.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/pair_emission_noio.pdf",
+      "recipes": [
+        "pair"
+      ],
+      "generated_paths": [
+        "figs/results/pair_emission_noio.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/pair_emission_shortio.pdf",
+      "recipes": [
+        "pair"
+      ],
+      "generated_paths": [
+        "figs/results/pair_emission_shortio.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/pair_emission_fullio.pdf",
+      "recipes": [
+        "pair"
+      ],
+      "generated_paths": [
+        "figs/results/pair_emission_fullio.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/general_dynamics_radius.pdf",
+      "recipes": [
+        "general"
+      ],
+      "generated_paths": [
+        "figs/results/general_dynamics_radius.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/general_dynamics_velocity.pdf",
+      "recipes": [
+        "general"
+      ],
+      "generated_paths": [
+        "figs/results/general_dynamics_velocity.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/general_dynamics_avgT.pdf",
+      "recipes": [
+        "general"
+      ],
+      "generated_paths": [
+        "figs/results/general_dynamics_avgT.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/general_emission_total.pdf",
+      "recipes": [
+        "general"
+      ],
+      "generated_paths": [
+        "figs/results/general_emission_total.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/general_emission_total_norm.pdf",
+      "recipes": [
+        "general"
+      ],
+      "generated_paths": [
+        "figs/results/general_emission_total_norm.pdf"
+      ]
+    },
+    {
+      "manuscript_source": "sections/results.tex",
+      "target": "figs/results/general_emission_radial.pdf",
+      "recipes": [
+        "general"
+      ],
+      "generated_paths": [
+        "figs/results/general_emission_radial.pdf"
+      ]
+    }
+  ]
+}

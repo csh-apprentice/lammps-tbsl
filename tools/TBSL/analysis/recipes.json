@@ -1,0 +1,131 @@
+{
+  "theory": {
+    "module": "section_3_theory_comparison",
+    "inputs": [
+      "theory/JSPJ_compare.csv",
+      "theory/theory.txt",
+      "theory/validation_1995_20ns.txt"
+    ]
+  },
+  "scaling": {
+    "module": "section_7_1_convergence",
+    "inputs": [
+      "1e6/boundary/1e6_comdis_01_08_alpha_1_minN100_smooth.out",
+      "1e6/boundary/run_1e6_01_08_alpha_1.lammps",
+      "1e7/1e7_comdis_01_07_minN100_smooth.out",
+      "1e7/run_1e7_01_07.lammps",
+      "1e8/1e8_comdis_full_minN100_smooth.out",
+      "1e8/run_1e8_full.lammps",
+      "theory/theory.txt"
+    ]
+  },
+  "boundary": {
+    "module": "section_7_2_boundary",
+    "inputs": [
+      "1e6/boundary/1e6_comdis_01_08_alpha_0_5_minN100_smooth.out",
+      "1e6/boundary/1e6_comdis_01_08_alpha_0_minN100_smooth.out",
+      "1e6/boundary/1e6_comdis_01_08_alpha_1_minN100_smooth.out",
+      "1e6/boundary/run_1e6_01_08_alpha_0.lammps",
+      "1e6/boundary/run_1e6_01_08_alpha_0_5.lammps",
+      "1e6/boundary/run_1e6_01_08_alpha_1.lammps"
+    ]
+  },
+  "pair": {
+    "module": "section_7_3_pair",
+    "inputs": [
+      "1e6/boundary/1e6_comdis_01_08_alpha_1_minN100_smooth.out",
+      "1e6/boundary/run_1e6_01_08_alpha_1.lammps",
+      "1e6/pair/1e6_comdis_01_08_alpha_1_noio_minN100_smooth.out",
+      "1e6/pair/1e6_comdis_01_13_alpha_1_shortio_minN100_smooth.out",
+      "1e6/pair/run_1e6_01_10_alpha_1_noio.lammps",
+      "1e6/pair/run_1e6_01_13_alpha_1_shortio.lammps"
+    ]
+  },
+  "table": {
+    "module": "section_7_4_table",
+    "inputs": [
+      "1e6/boundary/1e6_comdis_01_08_alpha_0_5_minN100_smooth.out",
+      "1e6/boundary/1e6_comdis_01_08_alpha_0_minN100_smooth.out",
+      "1e6/boundary/1e6_comdis_01_08_alpha_1_minN100_smooth.out",
+      "1e6/boundary/run_1e6_01_08_alpha_0.lammps",
+      "1e6/boundary/run_1e6_01_08_alpha_0_5.lammps",
+      "1e6/boundary/run_1e6_01_08_alpha_1.lammps",
+      "1e6/pair/1e6_comdis_01_08_alpha_0_5_noio_minN100_smooth.out",
+      "1e6/pair/1e6_comdis_01_08_alpha_0_noio_minN100_smooth.out",
+      "1e6/pair/1e6_comdis_01_08_alpha_1_noio_minN100_smooth.out",
+      "1e6/pair/1e6_comdis_01_13_alpha_0_5_shortio_minN100_smooth.out",
+      "1e6/pair/1e6_comdis_01_13_alpha_0_shortio_minN100_smooth.out",
+      "1e6/pair/1e6_comdis_01_13_alpha_1_shortio_minN100_smooth.out",
+      "1e6/pair/run_1e6_01_10_alpha_0_5_noio.lammps",
+      "1e6/pair/run_1e6_01_10_alpha_0_noio.lammps",
+      "1e6/pair/run_1e6_01_10_alpha_1_noio.lammps",
+      "1e6/pair/run_1e6_01_13_alpha_0_5_shortio.lammps",
+      "1e6/pair/run_1e6_01_13_alpha_0_shortio.lammps",
+      "1e6/pair/run_1e6_01_13_alpha_1_shortio.lammps",
+      "1e7/1e7_comdis_01_07_minN100_smooth.out",
+      "1e7/run_1e7_01_07.lammps",
+      "1e8/1e8_comdis_full_minN100_smooth.out",
+      "1e8/run_1e8_full.lammps"
+    ]
+  },
+  "general": {
+    "module": "section_7_5_general",
+    "inputs": [
+      "1e6/boundary/1e6_comdis_01_08_alpha_1_minN100_smooth.out",
+      "1e6/boundary/run_1e6_01_08_alpha_1.lammps",
+      "1e7/1e7_comdis_01_07_minN100_smooth.out",
+      "1e7/run_1e7_01_07.lammps",
+      "1e8/1e8_comdis_full_minN100_smooth.out",
+      "1e8/run_1e8_full.lammps",
+      "theory/press_frac.txt",
+      "theory/temp_frac.txt",
+      "theory/theory.txt"
+    ]
+  },
+  "cutoff": {
+    "module": "section_8_1_convergence",
+    "inputs": []
+  },
+  "performance": {
+    "module": "performance_analysis",
+    "inputs": [
+      "1e6/boundary/run_1e6_01_08_alpha_1.lammps",
+      "1e7/run_1e7_01_07.lammps",
+      "1e8/run_1e8_full.lammps",
+      "anvil_1e8",
+      "anvil_1e8/run_1e8_12_03.lammps",
+      "performance/1e6_full_0.5.lammps",
+      "performance/1e6_no_0.5.lammps",
+      "performance/1e6_short_0.5.lammps",
+      "performance/1e7_full.lammps",
+      "performance/1e8_full.lammps"
+    ]
+  },
+  "appendix": {
+    "module": "appendix_figures",
+    "inputs": [
+      "1e6/boundary/1e6_comdis_01_08_alpha_0_5_minN100_smooth.out",
+      "1e6/boundary/1e6_comdis_01_08_alpha_0_minN100_smooth.out",
+      "1e6/boundary/1e6_comdis_01_08_alpha_1_minN100_smooth.out",
+      "1e6/boundary/run_1e6_01_08_alpha_0.lammps",
+      "1e6/boundary/run_1e6_01_08_alpha_0_5.lammps",
+      "1e6/boundary/run_1e6_01_08_alpha_1.lammps",
+      "1e6/pair/1e6_comdis_01_08_alpha_0_5_noio_minN100_smooth.out",
+      "1e6/pair/1e6_comdis_01_08_alpha_0_noio_minN100_smooth.out",
+      "1e6/pair/1e6_comdis_01_08_alpha_1_noio_minN100_smooth.out",
+      "1e6/pair/1e6_comdis_01_13_alpha_0_5_shortio_minN100_smooth.out",
+      "1e6/pair/1e6_comdis_01_13_alpha_0_shortio_minN100_smooth.out",
+      "1e6/pair/1e6_comdis_01_13_alpha_1_shortio_minN100_smooth.out",
+      "1e6/pair/run_1e6_01_10_alpha_0_5_noio.lammps",
+      "1e6/pair/run_1e6_01_10_alpha_0_noio.lammps",
+      "1e6/pair/run_1e6_01_10_alpha_1_noio.lammps",
+      "1e6/pair/run_1e6_01_13_alpha_0_5_shortio.lammps",
+      "1e6/pair/run_1e6_01_13_alpha_0_shortio.lammps",
+      "1e6/pair/run_1e6_01_13_alpha_1_shortio.lammps",
+      "1e7/1e7_comdis_01_07_minN100_smooth.out",
+      "1e7/run_1e7_01_07.lammps",
+      "1e8/1e8_comdis_full_minN100_smooth.out",
+      "1e8/run_1e8_full.lammps"
+    ]
+  }
+}
